@@ -23,7 +23,11 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { buildCommandPacket, type CommandPacket } from "@/lib/orchestra/commander";
+import {
+  buildCommandPacket,
+  type CommandPacket,
+  type CommandTemplateConfig,
+} from "@/lib/orchestra/commander";
 import { getDefaultOrchestraBoard, orchestraAgents, orchestraScenarios } from "@/lib/orchestra/data";
 import {
   executorAdapters,
@@ -50,6 +54,7 @@ type Locale = "zh" | "en";
 type BatchStrategy = "manual" | "dependency" | "owner" | "priority";
 type QuickFilter = "all" | "ready" | "blocked" | "critical";
 type ExecutorAdapterMode = "simulated-local" | "cli-preview" | "reviewer-preview";
+type ExecutionStage = "preview" | "armed" | "live";
 type BatchRunSummary = {
   id: string;
   createdAt: string;
@@ -97,6 +102,19 @@ const quickFilterLabel: Record<Locale, Record<QuickFilter, string>> = {
     ready: "Ready",
     blocked: "Blocked",
     critical: "Critical",
+  },
+};
+
+const executionStageLabel: Record<Locale, Record<ExecutionStage, string>> = {
+  zh: {
+    preview: "预览",
+    armed: "已布防",
+    live: "实时",
+  },
+  en: {
+    preview: "Preview",
+    armed: "Armed",
+    live: "Live",
   },
 };
 
@@ -727,6 +745,11 @@ export function OrchestraBoard() {
   const [selectedCommandTaskIds, setSelectedCommandTaskIds] = useState<string[]>([]);
   const [batchStrategy, setBatchStrategy] = useState<BatchStrategy>("manual");
   const [adapterMode, setAdapterMode] = useState<ExecutorAdapterMode>("simulated-local");
+  const [executionStage, setExecutionStage] = useState<ExecutionStage>("preview");
+  const [commandTemplates, setCommandTemplates] = useState<CommandTemplateConfig>({
+    codex: 'codex exec "{title}: {summary}"',
+    claude_code: 'claude-code run "{title}: {summary}"',
+  });
   const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
   const [dragOverLane, setDragOverLane] = useState<OrchestraTask["lane"] | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
@@ -807,9 +830,38 @@ export function OrchestraBoard() {
     () => executorAdapters.find((adapter) => adapter.id === adapterMode) ?? simulatedExecutorAdapter,
     [adapterMode],
   );
+  const environmentChecks = useMemo(
+    () => [
+      {
+        id: "codex",
+        label: "Codex CLI",
+        ok: commandTemplates.codex.includes("codex"),
+        detail: locale === "zh"
+          ? "模板里已经包含 Codex 命令前缀。"
+          : "The configured template includes a Codex command prefix.",
+      },
+      {
+        id: "claude",
+        label: "Claude Code CLI",
+        ok: commandTemplates.claude_code.includes("claude"),
+        detail: locale === "zh"
+          ? "模板里已经包含 Claude Code 命令前缀。"
+          : "The configured template includes a Claude Code command prefix.",
+      },
+      {
+        id: "stage",
+        label: locale === "zh" ? "运行档位" : "Execution Stage",
+        ok: executionStage !== "live",
+        detail: executionStage === "live"
+          ? (locale === "zh" ? "当前仍为开源演示仓库，live 仅作为未来接入占位。" : "Live remains a placeholder in this open-source demo.")
+          : (locale === "zh" ? "当前档位仍然是安全模式，不会调用外部进程。" : "Current stage is still safe and will not invoke external processes."),
+      },
+    ],
+    [commandTemplates.claude_code, commandTemplates.codex, executionStage, locale],
+  );
   const commandPackets = useMemo(
-    () => orderedCommandTasks.map((task) => buildCommandPacket(board.feature, task, task.owner)),
-    [board.feature, orderedCommandTasks],
+    () => orderedCommandTasks.map((task) => buildCommandPacket(board.feature, task, task.owner, commandTemplates)),
+    [board.feature, commandTemplates, orderedCommandTasks],
   );
 
   useEffect(() => {
@@ -834,6 +886,8 @@ export function OrchestraBoard() {
           selectedCommandTaskIds?: string[];
           batchStrategy?: BatchStrategy;
           adapterMode?: ExecutorAdapterMode;
+          executionStage?: ExecutionStage;
+          commandTemplates?: CommandTemplateConfig;
         };
 
         const normalizedBoard = normalizeBoard(parsed.board);
@@ -845,6 +899,11 @@ export function OrchestraBoard() {
         setSelectedCommandTaskIds(parsed.selectedCommandTaskIds ?? []);
         setBatchStrategy(parsed.batchStrategy ?? "manual");
         setAdapterMode(parsed.adapterMode ?? "simulated-local");
+        setExecutionStage(parsed.executionStage ?? "preview");
+        setCommandTemplates(parsed.commandTemplates ?? {
+          codex: 'codex exec "{title}: {summary}"',
+          claude_code: 'claude-code run "{title}: {summary}"',
+        });
         setTitle(normalizedBoard.feature.title);
         setProblem(normalizedBoard.feature.problem);
         setGoals(normalizedBoard.feature.goals.join("\n"));
@@ -874,9 +933,11 @@ export function OrchestraBoard() {
         selectedCommandTaskIds,
         batchStrategy,
         adapterMode,
+        executionStage,
+        commandTemplates,
       }),
     );
-  }, [adapterMode, batchStrategy, batchSummaries, board, selectedTaskId, runHistory, timeline, selectedCommandTaskIds]);
+  }, [adapterMode, batchStrategy, batchSummaries, board, commandTemplates, executionStage, selectedTaskId, runHistory, timeline, selectedCommandTaskIds]);
 
   function handleGeneratePlan() {
     const idea: OrchestraFeatureIdea = {
@@ -899,6 +960,7 @@ export function OrchestraBoard() {
     setSelectedCommandTaskIds([]);
     setBatchStrategy("manual");
     setAdapterMode("simulated-local");
+    setExecutionStage("preview");
   }
 
   function applyScenario(scenario: OrchestraScenario) {
@@ -919,6 +981,7 @@ export function OrchestraBoard() {
     setSelectedCommandTaskIds([]);
     setBatchStrategy("manual");
     setAdapterMode("simulated-local");
+    setExecutionStage("preview");
   }
 
   function resetDemo() {
@@ -938,6 +1001,7 @@ export function OrchestraBoard() {
     setSelectedCommandTaskIds([]);
     setBatchStrategy("manual");
     setAdapterMode("simulated-local");
+    setExecutionStage("preview");
   }
 
   function handleGenerateHandoff(task: OrchestraTask) {
@@ -2131,6 +2195,88 @@ export function OrchestraBoard() {
                     <div className="text-sm font-medium text-slate-900">{selectedAdapter.name}</div>
                     <p className="mt-2 text-sm leading-6 text-slate-600">{selectedAdapter.description}</p>
                   </div>
+                </div>
+              </div>
+              <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                <div className="grid gap-4 lg:grid-cols-2">
+                  <label className="grid gap-2 text-sm">
+                    <span className="font-medium text-slate-700">{locale === "zh" ? "Codex 命令模板" : "Codex Command Template"}</span>
+                    <Input
+                      value={commandTemplates.codex}
+                      onChange={(event) => setCommandTemplates((current) => ({ ...current, codex: event.target.value }))}
+                    />
+                  </label>
+                  <label className="grid gap-2 text-sm">
+                    <span className="font-medium text-slate-700">{locale === "zh" ? "Claude Code 命令模板" : "Claude Code Command Template"}</span>
+                    <Input
+                      value={commandTemplates.claude_code}
+                      onChange={(event) => setCommandTemplates((current) => ({ ...current, claude_code: event.target.value }))}
+                    />
+                  </label>
+                </div>
+                <p className="mt-3 text-xs text-slate-500">
+                  {locale === "zh"
+                    ? "支持变量：{title}、{summary}、{owner}。"
+                    : "Supported variables: {title}, {summary}, {owner}."}
+                </p>
+              </div>
+              <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                <div className="grid gap-3 md:grid-cols-[220px_1fr] md:items-center">
+                  <label className="grid gap-2 text-sm">
+                    <span className="font-medium text-slate-700">{locale === "zh" ? "运行档位" : "Execution Stage"}</span>
+                    <select
+                      value={executionStage}
+                      onChange={(event) => setExecutionStage(event.target.value as ExecutionStage)}
+                      className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm outline-none focus:border-slate-300"
+                    >
+                      {(["preview", "armed", "live"] as ExecutionStage[]).map((stage) => (
+                        <option key={stage} value={stage}>
+                          {executionStageLabel[locale][stage]}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
+                    <div className="text-sm font-medium text-slate-900">{executionStageLabel[locale][executionStage]}</div>
+                    <p className="mt-2 text-sm leading-6 text-slate-600">
+                      {executionStage === "preview"
+                        ? (locale === "zh"
+                          ? "仅生成 handoff 和命令，不做任何外部执行。"
+                          : "Only generates handoffs and commands, with no external execution.")
+                        : executionStage === "armed"
+                          ? (locale === "zh"
+                            ? "进入接近真实执行的状态，但仍然不会真正调用 CLI。"
+                            : "Moves closer to live execution, but still does not invoke CLIs.")
+                          : (locale === "zh"
+                            ? "这是未来真实执行的占位模式，当前开源版仍会保持安全模式。"
+                            : "This is a placeholder for future live execution; the open-source demo remains safe.")}
+                    </p>
+                  </div>
+                </div>
+              </div>
+              <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                <div className="text-xs uppercase tracking-[0.18em] text-slate-500">
+                  {locale === "zh" ? "环境前置检查" : "Environment Checks"}
+                </div>
+                <div className="mt-4 space-y-3">
+                  {environmentChecks.map((check) => (
+                    <div key={check.id} className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="text-sm font-medium text-slate-900">{check.label}</div>
+                        <Badge
+                          className={cn(
+                            "rounded-full border",
+                            check.ok
+                              ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                              : "border-amber-200 bg-amber-50 text-amber-700",
+                          )}
+                        >
+                          {check.ok ? (locale === "zh" ? "通过" : "OK") : (locale === "zh" ? "待配置" : "Pending")}
+                        </Badge>
+                      </div>
+                      <p className="mt-2 text-sm leading-6 text-slate-600">{check.detail}</p>
+                    </div>
+                  ))}
                 </div>
               </div>
               <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4">

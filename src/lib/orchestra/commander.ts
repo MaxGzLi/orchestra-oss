@@ -12,6 +12,11 @@ export interface CommandPacket {
   prompt: string;
 }
 
+export interface CommandTemplateConfig {
+  codex: string;
+  claude_code: string;
+}
+
 function ownerDisplayName(executor: OrchestraExecutor): string {
   switch (executor) {
     case "claude_code":
@@ -29,25 +34,33 @@ function ownerDisplayName(executor: OrchestraExecutor): string {
   }
 }
 
-function buildSuggestedCommand(executor: OrchestraExecutor, task: OrchestraTask): string {
-  const escapedTitle = task.title.replace(/"/g, '\\"');
-  const escapedSummary = task.summary.replace(/"/g, '\\"');
+function applyTemplate(template: string, task: OrchestraTask): string {
+  return template
+    .replaceAll("{title}", task.title.replace(/"/g, '\\"'))
+    .replaceAll("{summary}", task.summary.replace(/"/g, '\\"'))
+    .replaceAll("{owner}", ownerDisplayName(task.owner));
+}
 
+function buildSuggestedCommand(executor: OrchestraExecutor, task: OrchestraTask, templates: CommandTemplateConfig): string {
   if (executor === "codex") {
-    return `codex exec "${escapedTitle}: ${escapedSummary}"`;
+    return applyTemplate(templates.codex, task);
   }
 
   if (executor === "claude_code") {
-    return `claude-code run "${escapedTitle}: ${escapedSummary}"`;
+    return applyTemplate(templates.claude_code, task);
   }
 
-  return `echo "Route ${escapedTitle} to ${ownerDisplayName(executor)}"`;
+  return `echo "Route ${task.title.replace(/"/g, '\\"')} to ${ownerDisplayName(executor)}"`;
 }
 
 export function buildCommandPacket(
   feature: OrchestraFeatureIdea,
   task: OrchestraTask,
   executor: OrchestraExecutor,
+  templates: CommandTemplateConfig = {
+    codex: 'codex exec "{title}: {summary}"',
+    claude_code: 'claude-code run "{title}: {summary}"',
+  },
 ): CommandPacket {
   const dependsOn = task.dependsOn.length
     ? [`Dependencies: ${task.dependsOn.join(", ")}`]
@@ -105,7 +118,7 @@ export function buildCommandPacket(
     successCriteria: task.acceptance,
     constraints,
     context,
-    suggestedCommand: buildSuggestedCommand(executor, task),
+    suggestedCommand: buildSuggestedCommand(executor, task, templates),
     prompt,
   };
 }
