@@ -1,4 +1,10 @@
-import type { AgentProfile, OrchestraBoard, OrchestraFeatureIdea, OrchestraTask } from "@/lib/orchestra/types";
+import type {
+  AgentProfile,
+  OrchestraBoard,
+  OrchestraFeatureIdea,
+  OrchestraScenario,
+  OrchestraTask,
+} from "@/lib/orchestra/types";
 
 export const orchestraAgents: AgentProfile[] = [
   {
@@ -135,3 +141,75 @@ export function getDefaultOrchestraBoard(): OrchestraBoard {
     suggestions: defaultSuggestions,
   };
 }
+
+export const orchestraScenarios: OrchestraScenario[] = [
+  {
+    id: "creator-copilot",
+    title: "Creator CRM Copilot",
+    summary: "A workflow assistant that helps sales and partnerships teams manage creator outreach.",
+    feature: {
+      id: "feat-creator-copilot",
+      title: "Creator CRM Copilot",
+      problem: "Sales and partnerships teams lose context when creator outreach moves across spreadsheets, chat threads, and reviews.",
+      goals: [
+        "Create a single board for outreach, follow-up, and review",
+        "Let planning and execution agents split work without manual issue creation",
+        "Give leadership a higher-level view of bottlenecks and opportunities",
+      ],
+      constraints: [
+        "Must work with an internal board instead of Linear",
+        "Needs clear review checkpoints before outbound automation",
+        "Should support bilingual teams",
+      ],
+      notes: [
+        "This scenario is useful for productizing Orchestra as an internal ops tool.",
+      ],
+    },
+  },
+  {
+    id: "release-radar",
+    title: "Release Radar",
+    summary: "A launch planning system that coordinates QA, docs, rollout, and post-launch feedback.",
+    feature: {
+      id: "feat-release-radar",
+      title: "Release Radar",
+      problem: "Launch work is split across docs, QA, engineering, and product, making release readiness difficult to judge.",
+      goals: [
+        "Turn launch plans into a visible execution graph",
+        "Route implementation work to Codex and review work to Claude Code",
+        "Track a portfolio-level readiness signal for every release",
+      ],
+      constraints: [
+        "Should not depend on a specific issue tracker",
+        "Must preserve human approval before release-critical changes",
+        "Needs a clear timeline for launch events",
+      ],
+      notes: [
+        "This scenario is good for showing product, QA, and engineering coordination.",
+      ],
+    },
+  },
+  {
+    id: "support-autofix",
+    title: "Support Autofix Pipeline",
+    summary: "A board that converts repeated support pain points into planned fixes and review tasks.",
+    feature: {
+      id: "feat-support-autofix",
+      title: "Support Autofix Pipeline",
+      problem: "Repeated support issues are discovered too late and rarely become structured, prioritized product work.",
+      goals: [
+        "Capture repeated pain points as feature briefs",
+        "Generate task graphs directly from support insights",
+        "Let a portfolio agent prioritize fixes by business impact",
+      ],
+      constraints: [
+        "Needs space for research and review tasks before coding starts",
+        "Should separate recurring fixes from one-off support replies",
+        "Must keep execution slices small and auditable",
+      ],
+      notes: [
+        "This scenario emphasizes intake and prioritization rather than greenfield delivery.",
+      ],
+    },
+  },
+];

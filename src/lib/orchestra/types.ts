@@ -90,3 +90,10 @@ export interface OrchestraPersistedState {
   runHistory: OrchestraRunRecord[];
   timeline: OrchestraTimelineEvent[];
 }
+
+export interface OrchestraScenario {
+  id: string;
+  title: string;
+  summary: string;
+  feature: OrchestraFeatureIdea;
+}

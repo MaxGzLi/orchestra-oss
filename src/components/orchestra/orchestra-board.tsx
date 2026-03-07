@@ -20,7 +20,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { buildCommandPacket, type CommandPacket } from "@/lib/orchestra/commander";
-import { getDefaultOrchestraBoard, orchestraAgents } from "@/lib/orchestra/data";
+import { getDefaultOrchestraBoard, orchestraAgents, orchestraScenarios } from "@/lib/orchestra/data";
 import { buildBoardFromIdea, summarizeByOwner } from "@/lib/orchestra/planner";
 import { cn } from "@/lib/utils";
 import type {
@@ -28,6 +28,7 @@ import type {
   OrchestraExecutor,
   OrchestraFeatureIdea,
   OrchestraRunRecord,
+  OrchestraScenario,
   OrchestraTask,
   OrchestraTaskState,
   OrchestraTimelineEvent,
@@ -388,6 +389,7 @@ export function OrchestraBoard() {
   const [runHistory, setRunHistory] = useState<OrchestraRunRecord[]>(initialSnapshot.runHistory);
   const [timeline, setTimeline] = useState<OrchestraTimelineEvent[]>(initialSnapshot.timeline);
   const [expandedRunId, setExpandedRunId] = useState<string | null>(null);
+  const [selectedScenarioId, setSelectedScenarioId] = useState<string>(orchestraScenarios[0]?.id ?? "");
 
   const taskCounts = useMemo(() => summarizeByOwner(board.tasks), [board.tasks]);
   const laneMap = useMemo(
@@ -399,6 +401,7 @@ export function OrchestraBoard() {
     [board.tasks, selectedTaskId],
   );
   const selectedTimeline = timeline.filter((event) => event.taskId === selectedTaskId);
+  const selectedScenario = orchestraScenarios.find((scenario) => scenario.id === selectedScenarioId) ?? orchestraScenarios[0];
 
   useEffect(() => {
     window.localStorage.setItem(LOCALE_KEY, locale);
@@ -433,6 +436,37 @@ export function OrchestraBoard() {
     setRunResult(null);
     setRunHistory([]);
     setTimeline([]);
+  }
+
+  function applyScenario(scenario: OrchestraScenario) {
+    setSelectedScenarioId(scenario.id);
+    setTitle(scenario.feature.title);
+    setProblem(scenario.feature.problem);
+    setGoals(scenario.feature.goals.join("\n"));
+    setConstraints(scenario.feature.constraints.join("\n"));
+
+    const nextBoard = buildBoardFromIdea(scenario.feature);
+    setBoard(nextBoard);
+    setSelectedTaskId(nextBoard.tasks[0]?.id ?? "");
+    setPacket(null);
+    setRunResult(null);
+    setRunHistory([]);
+    setTimeline([]);
+  }
+
+  function resetDemo() {
+    const nextBoard = getDefaultOrchestraBoard();
+    setBoard(nextBoard);
+    setTitle(nextBoard.feature.title);
+    setProblem(nextBoard.feature.problem);
+    setGoals(nextBoard.feature.goals.join("\n"));
+    setConstraints(nextBoard.feature.constraints.join("\n"));
+    setSelectedTaskId(nextBoard.tasks[0]?.id ?? "");
+    setPacket(null);
+    setRunResult(null);
+    setRunHistory([]);
+    setTimeline([]);
+    setSelectedScenarioId(orchestraScenarios[0]?.id ?? "");
   }
 
   function handleGenerateHandoff(task: OrchestraTask) {
@@ -508,6 +542,89 @@ export function OrchestraBoard() {
             ))}
           </div>
         </div>
+      </section>
+
+      <section className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
+        <Card className="border-slate-200/80 shadow-[0_18px_40px_-30px_rgba(15,23,42,0.35)]">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-slate-950">
+              <Sparkles className="h-5 w-5 text-sky-600" />
+              {locale === "zh" ? "快速上手" : "Quick Start"}
+            </CardTitle>
+            <CardDescription>
+              {locale === "zh"
+                ? "如果你还没体验过这个系统，可以按下面 4 步走一遍。"
+                : "If you have not used this system yet, walk through these four steps first."}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {[
+              locale === "zh"
+                ? "1. 先在右侧载入一个示例场景，观察它如何直接生成任务图。"
+                : "1. Load a sample scenario and see how it becomes a task graph immediately.",
+              locale === "zh"
+                ? "2. 点击任意任务卡上的“生成交接包”，看 Commander 如何给不同 agent 分派任务。"
+                : "2. Click `Generate Handoff` on a task to see how Commander routes work to different agents.",
+              locale === "zh"
+                ? "3. 在 Commander Console 里点击“运行”，体验本地模拟执行和 timeline。"
+                : "3. Click `Run` in the Commander Console to experience the local simulated execution and timeline.",
+              locale === "zh"
+                ? "4. 再修改 feature brief，自己生成一版新的计划。"
+                : "4. Then edit the feature brief and generate a new plan of your own.",
+            ].map((step) => (
+              <div key={step} className="rounded-2xl border border-slate-200 bg-[linear-gradient(180deg,_#ffffff_0%,_#fbfdff_100%)] p-4 text-sm leading-7 text-slate-600">
+                {step}
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+
+        <Card className="border-slate-200/80 shadow-[0_18px_40px_-30px_rgba(15,23,42,0.35)]">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-slate-950">
+              <Flag className="h-5 w-5 text-emerald-600" />
+              {locale === "zh" ? "示例场景" : "Sample Scenarios"}
+            </CardTitle>
+            <CardDescription>
+              {locale === "zh"
+                ? "这些是为了帮助你体验 Orchestra 的预置案例。"
+                : "These presets are designed to help you experience the Orchestra workflow quickly."}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {orchestraScenarios.map((scenario) => (
+              <div
+                key={scenario.id}
+                className={cn(
+                  "rounded-2xl border p-4 transition-all",
+                  selectedScenario?.id === scenario.id
+                    ? "border-slate-300 bg-slate-50 ring-2 ring-slate-950/5"
+                    : "border-slate-200 bg-[linear-gradient(180deg,_#ffffff_0%,_#fbfdff_100%)]",
+                )}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="text-sm font-semibold text-slate-900">{scenario.title}</div>
+                    <p className="mt-1 text-sm leading-6 text-slate-600">{scenario.summary}</p>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="rounded-full border-slate-200 bg-white shadow-sm"
+                    onClick={() => applyScenario(scenario)}
+                  >
+                    {locale === "zh" ? "载入" : "Load"}
+                  </Button>
+                </div>
+              </div>
+            ))}
+            <div className="flex justify-end pt-2">
+              <Button variant="ghost" size="sm" className="rounded-full" onClick={resetDemo}>
+                {locale === "zh" ? "重置为默认示例" : "Reset to Default Demo"}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
       </section>
 
       <section className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
