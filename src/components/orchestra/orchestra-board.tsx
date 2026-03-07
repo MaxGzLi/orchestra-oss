@@ -39,6 +39,7 @@ import type {
 } from "@/lib/orchestra/types";
 
 type Locale = "zh" | "en";
+type BatchStrategy = "manual" | "dependency" | "owner" | "priority";
 type DemoResult = {
   executor: OrchestraExecutor;
   mode: "dry_run";
@@ -54,6 +55,21 @@ const STATE_KEY = "orchestra-oss-state";
 const localeLabel: Record<Locale, string> = {
   zh: "中文",
   en: "EN",
+};
+
+const batchStrategyLabel: Record<Locale, Record<BatchStrategy, string>> = {
+  zh: {
+    manual: "手动顺序",
+    dependency: "按依赖",
+    owner: "按执行者",
+    priority: "按优先级",
+  },
+  en: {
+    manual: "Manual",
+    dependency: "Dependencies",
+    owner: "Executor",
+    priority: "Priority",
+  },
 };
 
 const statusLabel: Record<Locale, Record<OrchestraTaskState, string>> = {
@@ -365,6 +381,98 @@ function buildBatchCommand(packetList: CommandPacket[]): string {
   return packetList.map((packet) => packet.suggestedCommand).join("\n");
 }
 
+function getPriorityRank(priority: OrchestraTaskPriority): number {
+  switch (priority) {
+    case "critical":
+      return 0;
+    case "high":
+      return 1;
+    case "medium":
+      return 2;
+    case "low":
+      return 3;
+  }
+}
+
+function getOwnerRank(owner: OrchestraExecutor): number {
+  switch (owner) {
+    case "planner":
+      return 0;
+    case "commander":
+      return 1;
+    case "codex":
+      return 2;
+    case "claude_code":
+      return 3;
+    case "portfolio":
+      return 4;
+    case "human":
+      return 5;
+  }
+}
+
+function sortTasksByDependency(tasks: OrchestraTask[]): OrchestraTask[] {
+  const taskMap = new Map(tasks.map((task) => [task.id, task]));
+  const visited = new Set<string>();
+  const visiting = new Set<string>();
+  const result: OrchestraTask[] = [];
+
+  function visit(task: OrchestraTask) {
+    if (visited.has(task.id)) {
+      return;
+    }
+    if (visiting.has(task.id)) {
+      result.push(task);
+      visited.add(task.id);
+      return;
+    }
+
+    visiting.add(task.id);
+    task.dependsOn
+      .map((dependencyId) => taskMap.get(dependencyId))
+      .filter((dependency): dependency is OrchestraTask => Boolean(dependency))
+      .forEach(visit);
+    visiting.delete(task.id);
+    visited.add(task.id);
+    result.push(task);
+  }
+
+  tasks.forEach(visit);
+  return result;
+}
+
+function sortCommandTasks(
+  tasks: OrchestraTask[],
+  strategy: BatchStrategy,
+  selectedIds: string[],
+): OrchestraTask[] {
+  const manualOrder = new Map(selectedIds.map((id, index) => [id, index]));
+  const base = [...tasks].sort((a, b) => (manualOrder.get(a.id) ?? 0) - (manualOrder.get(b.id) ?? 0));
+
+  switch (strategy) {
+    case "manual":
+      return base;
+    case "dependency":
+      return sortTasksByDependency(base);
+    case "owner":
+      return [...base].sort((a, b) => {
+        const ownerRank = getOwnerRank(a.owner) - getOwnerRank(b.owner);
+        if (ownerRank !== 0) {
+          return ownerRank;
+        }
+        return (manualOrder.get(a.id) ?? 0) - (manualOrder.get(b.id) ?? 0);
+      });
+    case "priority":
+      return [...base].sort((a, b) => {
+        const priorityRank = getPriorityRank(a.priority) - getPriorityRank(b.priority);
+        if (priorityRank !== 0) {
+          return priorityRank;
+        }
+        return (manualOrder.get(a.id) ?? 0) - (manualOrder.get(b.id) ?? 0);
+      });
+  }
+}
+
 function buildRunRecord(taskId: string, result: DemoResult): OrchestraRunRecord {
   return {
     id: `${taskId}-${Date.now()}`,
@@ -478,7 +586,10 @@ export function OrchestraBoard() {
   const [expandedRunId, setExpandedRunId] = useState<string | null>(null);
   const [selectedScenarioId, setSelectedScenarioId] = useState<string>(orchestraScenarios[0]?.id ?? "");
   const [selectedCommandTaskIds, setSelectedCommandTaskIds] = useState<string[]>([]);
+  const [batchStrategy, setBatchStrategy] = useState<BatchStrategy>("manual");
   const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
+  const [dragOverLane, setDragOverLane] = useState<OrchestraTask["lane"] | null>(null);
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
   const [newTaskTitle, setNewTaskTitle] = useState("");
   const [newTaskSummary, setNewTaskSummary] = useState("");
   const [newTaskLane, setNewTaskLane] = useState<OrchestraTask["lane"]>("execution");
@@ -499,9 +610,13 @@ export function OrchestraBoard() {
     () => board.tasks.filter((task) => selectedCommandTaskIds.includes(task.id)),
     [board.tasks, selectedCommandTaskIds],
   );
+  const orderedCommandTasks = useMemo(
+    () => sortCommandTasks(commandTasks, batchStrategy, selectedCommandTaskIds),
+    [batchStrategy, commandTasks, selectedCommandTaskIds],
+  );
   const commandPackets = useMemo(
-    () => commandTasks.map((task) => buildCommandPacket(board.feature, task, task.owner)),
-    [board.feature, commandTasks],
+    () => orderedCommandTasks.map((task) => buildCommandPacket(board.feature, task, task.owner)),
+    [board.feature, orderedCommandTasks],
   );
 
   useEffect(() => {
@@ -523,6 +638,7 @@ export function OrchestraBoard() {
           runHistory: OrchestraRunRecord[];
           timeline: OrchestraTimelineEvent[];
           selectedCommandTaskIds?: string[];
+          batchStrategy?: BatchStrategy;
         };
 
         setBoard(parsed.board);
@@ -530,6 +646,7 @@ export function OrchestraBoard() {
         setRunHistory(parsed.runHistory ?? []);
         setTimeline(parsed.timeline ?? []);
         setSelectedCommandTaskIds(parsed.selectedCommandTaskIds ?? []);
+        setBatchStrategy(parsed.batchStrategy ?? "manual");
         setTitle(parsed.board.feature.title);
         setProblem(parsed.board.feature.problem);
         setGoals(parsed.board.feature.goals.join("\n"));
@@ -556,9 +673,10 @@ export function OrchestraBoard() {
         runHistory,
         timeline,
         selectedCommandTaskIds,
+        batchStrategy,
       }),
     );
-  }, [board, selectedTaskId, runHistory, timeline, selectedCommandTaskIds]);
+  }, [batchStrategy, board, selectedTaskId, runHistory, timeline, selectedCommandTaskIds]);
 
   function handleGeneratePlan() {
     const idea: OrchestraFeatureIdea = {
@@ -578,6 +696,7 @@ export function OrchestraBoard() {
     setRunHistory([]);
     setTimeline([]);
     setSelectedCommandTaskIds([]);
+    setBatchStrategy("manual");
   }
 
   function applyScenario(scenario: OrchestraScenario) {
@@ -595,6 +714,7 @@ export function OrchestraBoard() {
     setRunHistory([]);
     setTimeline([]);
     setSelectedCommandTaskIds([]);
+    setBatchStrategy("manual");
   }
 
   function resetDemo() {
@@ -611,6 +731,7 @@ export function OrchestraBoard() {
     setTimeline([]);
     setSelectedScenarioId(orchestraScenarios[0]?.id ?? "");
     setSelectedCommandTaskIds([]);
+    setBatchStrategy("manual");
   }
 
   function handleGenerateHandoff(task: OrchestraTask) {
@@ -625,7 +746,7 @@ export function OrchestraBoard() {
       return;
     }
 
-    setSelectedTaskId(commandTasks[0]?.id ?? "");
+    setSelectedTaskId(orderedCommandTasks[0]?.id ?? "");
     setPacket(commandPackets[0] ?? null);
     setRunResult(null);
   }
@@ -635,20 +756,19 @@ export function OrchestraBoard() {
       return;
     }
 
-    const results = commandPackets.map((packet) => ({
-      packet,
-      task: commandTasks.find((task) => task.id === packet.title || task.title === packet.title) ?? board.tasks.find((task) => task.title === packet.title),
-      result: buildDemoResult(packet),
+    const results = orderedCommandTasks.map((task, index) => ({
+      task,
+      packet: commandPackets[index],
+      result: buildDemoResult(commandPackets[index]),
     }));
-    const validResults = results.filter((item): item is typeof item & { task: OrchestraTask } => Boolean(item.task));
-    if (!validResults.length) {
+    if (!results.length) {
       return;
     }
 
-    const records = validResults.map(({ task, result }) => buildRunRecord(task.id, result));
-    const nextTimeline = validResults.flatMap(({ task }, index) => buildTimeline(task.id, records[index].id, locale));
+    const records = results.map(({ task, result }) => buildRunRecord(task.id, result));
+    const nextTimeline = results.flatMap(({ task }, index) => buildTimeline(task.id, records[index].id, locale));
 
-    setRunResult(validResults[validResults.length - 1]?.result ?? null);
+    setRunResult(results[results.length - 1]?.result ?? null);
     setRunHistory((current) => [...records.reverse(), ...current].slice(0, 20));
     setTimeline((current) => [...nextTimeline.reverse(), ...current].slice(0, 80));
     setBoard((current) => ({
@@ -765,6 +885,8 @@ export function OrchestraBoard() {
 
     setBoard((current) => moveTask(current, draggedTaskId, targetLane, targetIndex));
     setDraggedTaskId(null);
+    setDragOverLane(null);
+    setDragOverIndex(null);
   }
 
   function handleMoveSelectedTask(direction: "up" | "down" | "left" | "right") {
@@ -1011,7 +1133,13 @@ export function OrchestraBoard() {
           </CardHeader>
           <CardContent className="grid gap-4 xl:grid-cols-2">
             {laneMap.map(({ lane, tasks }) => (
-              <div key={lane} className="rounded-[26px] border border-slate-200 bg-[linear-gradient(180deg,_rgba(255,255,255,0.85)_0%,_rgba(248,250,252,0.96)_100%)] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.7)]">
+              <div
+                key={lane}
+                className={cn(
+                  "rounded-[26px] border border-slate-200 bg-[linear-gradient(180deg,_rgba(255,255,255,0.85)_0%,_rgba(248,250,252,0.96)_100%)] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.7)] transition-all",
+                  dragOverLane === lane && "border-sky-300 bg-[linear-gradient(180deg,_rgba(240,249,255,0.95)_0%,_rgba(239,246,255,0.98)_100%)] ring-2 ring-sky-100",
+                )}
+              >
                 <div className="mb-3 flex items-center justify-between">
                   <div>
                     <h3 className="font-medium text-slate-900">{laneLabels[locale][lane]}</h3>
@@ -1023,28 +1151,48 @@ export function OrchestraBoard() {
                 </div>
                 <div
                   className="space-y-3"
-                  onDragOver={(event) => event.preventDefault()}
+                  onDragOver={(event) => {
+                    event.preventDefault();
+                    setDragOverLane(lane);
+                    setDragOverIndex(tasks.length);
+                  }}
+                  onDragLeave={() => {
+                    setDragOverLane((current) => (current === lane ? null : current));
+                    setDragOverIndex((current) => (dragOverLane === lane ? null : current));
+                  }}
                   onDrop={() => handleTaskDrop(lane, tasks.length)}
                 >
                   {tasks.map((task, index) => {
                     const translatedTask = translateTask(task, locale);
                     return (
-                      <div
-                        key={task.id}
-                        draggable
-                        onDragStart={() => setDraggedTaskId(task.id)}
-                        onDragEnd={() => setDraggedTaskId(null)}
-                        onDragOver={(event) => event.preventDefault()}
-                        onDrop={(event) => {
-                          event.preventDefault();
-                          handleTaskDrop(lane, index);
-                        }}
-                        className={cn(
-                          "rounded-2xl border border-slate-200 bg-[linear-gradient(180deg,_#ffffff_0%,_#fbfdff_100%)] p-4 shadow-[0_12px_30px_-24px_rgba(15,23,42,0.45)] transition-all",
-                          selectedTaskId === task.id && "border-slate-300 ring-2 ring-slate-950/10",
-                          draggedTaskId === task.id && "opacity-60",
-                        )}
-                      >
+                      <div key={task.id} className="space-y-2">
+                        {dragOverLane === lane && dragOverIndex === index ? (
+                          <div className="h-1.5 rounded-full bg-sky-500/70 shadow-[0_0_0_4px_rgba(14,165,233,0.12)]" />
+                        ) : null}
+                        <div
+                          draggable
+                          onDragStart={() => setDraggedTaskId(task.id)}
+                          onDragEnd={() => {
+                            setDraggedTaskId(null);
+                            setDragOverLane(null);
+                            setDragOverIndex(null);
+                          }}
+                          onDragOver={(event) => {
+                            event.preventDefault();
+                            setDragOverLane(lane);
+                            setDragOverIndex(index);
+                          }}
+                          onDrop={(event) => {
+                            event.preventDefault();
+                            handleTaskDrop(lane, index);
+                          }}
+                          className={cn(
+                            "rounded-2xl border border-slate-200 bg-[linear-gradient(180deg,_#ffffff_0%,_#fbfdff_100%)] p-4 shadow-[0_12px_30px_-24px_rgba(15,23,42,0.45)] transition-all",
+                            selectedTaskId === task.id && "border-slate-300 ring-2 ring-slate-950/10",
+                            draggedTaskId === task.id && "scale-[0.985] opacity-60",
+                            dragOverLane === lane && dragOverIndex === index && "border-sky-300",
+                          )}
+                        >
                         <div className="flex items-start justify-between gap-3">
                           <div className="flex items-start gap-3">
                             <button
@@ -1101,9 +1249,13 @@ export function OrchestraBoard() {
                             </Button>
                           </div>
                         </div>
+                        </div>
                       </div>
                     );
                   })}
+                  {dragOverLane === lane && dragOverIndex === tasks.length ? (
+                    <div className="h-1.5 rounded-full bg-sky-500/70 shadow-[0_0_0_4px_rgba(14,165,233,0.12)]" />
+                  ) : null}
                 </div>
               </div>
             ))}
@@ -1428,21 +1580,34 @@ export function OrchestraBoard() {
                         : `${commandTasks.length} tasks selected for batched handoff.`}
                     </p>
                   </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="rounded-full border-slate-200 bg-white shadow-sm"
-                    onClick={handleGenerateBatchHandoff}
-                    disabled={!commandTasks.length}
-                  >
-                    {locale === "zh" ? "生成批量交接包" : "Generate Batch Handoff"}
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    <select
+                      value={batchStrategy}
+                      onChange={(event) => setBatchStrategy(event.target.value as BatchStrategy)}
+                      className="rounded-full border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm outline-none focus:border-slate-300"
+                    >
+                      {(["manual", "dependency", "owner", "priority"] as BatchStrategy[]).map((strategy) => (
+                        <option key={strategy} value={strategy}>
+                          {batchStrategyLabel[locale][strategy]}
+                        </option>
+                      ))}
+                    </select>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="rounded-full border-slate-200 bg-white shadow-sm"
+                      onClick={handleGenerateBatchHandoff}
+                      disabled={!commandTasks.length}
+                    >
+                      {locale === "zh" ? "生成批量交接包" : "Generate Batch Handoff"}
+                    </Button>
+                  </div>
                 </div>
-                {commandTasks.length ? (
+                {orderedCommandTasks.length ? (
                   <div className="mt-3 flex flex-wrap gap-2">
-                    {commandTasks.map((task) => (
+                    {orderedCommandTasks.map((task, index) => (
                       <Badge key={task.id} variant="outline" className="rounded-full border-slate-300 bg-white text-slate-700">
-                        {translateTask(task, locale).title}
+                        {index + 1}. {translateTask(task, locale).title}
                       </Badge>
                     ))}
                   </div>
