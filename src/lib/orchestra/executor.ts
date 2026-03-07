@@ -24,6 +24,8 @@ export interface BatchExecutionPlan {
 
 export interface OrchestraExecutorAdapter {
   id: string;
+  name: string;
+  description: string;
   execute(packet: CommandPacket, task: OrchestraTask, board: OrchestraBoard): ExecutorRunResult;
 }
 
@@ -76,6 +78,8 @@ export function isTaskRunnable(
 
 export const simulatedExecutorAdapter: OrchestraExecutorAdapter = {
   id: "simulated-local",
+  name: "Simulated Local",
+  description: "Runs a safe local dry-run and produces deterministic output for demos.",
   execute(packet) {
     return {
       executor: packet.executor,
@@ -91,6 +95,54 @@ export const simulatedExecutorAdapter: OrchestraExecutorAdapter = {
     };
   },
 };
+
+export const cliPreviewExecutorAdapter: OrchestraExecutorAdapter = {
+  id: "cli-preview",
+  name: "CLI Preview",
+  description: "Prepares shell-oriented handoff output without invoking external CLIs yet.",
+  execute(packet, task) {
+    return {
+      executor: packet.executor,
+      mode: "dry_run",
+      command: packet.suggestedCommand,
+      stdout: [
+        "Prepared CLI preview handoff.",
+        `Task: ${task.title}`,
+        `Command: ${packet.suggestedCommand}`,
+        "Next step: wire this adapter to a real Codex / Claude Code process runner.",
+      ].join("\n"),
+      stderr: "No process was launched. This adapter is a preview bridge for future live execution.",
+      durationMs: 120,
+    };
+  },
+};
+
+export const reviewerExecutorAdapter: OrchestraExecutorAdapter = {
+  id: "reviewer-preview",
+  name: "Reviewer Preview",
+  description: "Simulates a review-focused pass that emphasizes risks and acceptance checks.",
+  execute(packet, task) {
+    return {
+      executor: packet.executor,
+      mode: "dry_run",
+      command: packet.suggestedCommand,
+      stdout: [
+        "Prepared review-oriented execution summary.",
+        `Task: ${task.title}`,
+        `Acceptance checks: ${task.acceptance.length}`,
+        "This mode is useful when you want to validate the handoff shape before coding.",
+      ].join("\n"),
+      stderr: "No stderr. Reviewer preview mode does not call any external tools.",
+      durationMs: 180,
+    };
+  },
+};
+
+export const executorAdapters: OrchestraExecutorAdapter[] = [
+  simulatedExecutorAdapter,
+  cliPreviewExecutorAdapter,
+  reviewerExecutorAdapter,
+];
 
 export function runBatchWithAdapter(args: {
   adapter: OrchestraExecutorAdapter;

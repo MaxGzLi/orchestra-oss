@@ -25,7 +25,12 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { buildCommandPacket, type CommandPacket } from "@/lib/orchestra/commander";
 import { getDefaultOrchestraBoard, orchestraAgents, orchestraScenarios } from "@/lib/orchestra/data";
-import { runBatchWithAdapter, simulatedExecutorAdapter, type ExecutorRunResult } from "@/lib/orchestra/executor";
+import {
+  executorAdapters,
+  runBatchWithAdapter,
+  simulatedExecutorAdapter,
+  type ExecutorRunResult,
+} from "@/lib/orchestra/executor";
 import { buildBoardFromIdea, summarizeByOwner } from "@/lib/orchestra/planner";
 import { cn } from "@/lib/utils";
 import type {
@@ -44,10 +49,12 @@ import type {
 type Locale = "zh" | "en";
 type BatchStrategy = "manual" | "dependency" | "owner" | "priority";
 type QuickFilter = "all" | "ready" | "blocked" | "critical";
+type ExecutorAdapterMode = "simulated-local" | "cli-preview" | "reviewer-preview";
 type BatchRunSummary = {
   id: string;
   createdAt: string;
   strategy: BatchStrategy;
+  adapterMode: ExecutorAdapterMode;
   total: number;
   succeeded: number;
   failed: number;
@@ -719,6 +726,7 @@ export function OrchestraBoard() {
   const [priorityFilter, setPriorityFilter] = useState<OrchestraTaskPriority | "all">("all");
   const [selectedCommandTaskIds, setSelectedCommandTaskIds] = useState<string[]>([]);
   const [batchStrategy, setBatchStrategy] = useState<BatchStrategy>("manual");
+  const [adapterMode, setAdapterMode] = useState<ExecutorAdapterMode>("simulated-local");
   const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
   const [dragOverLane, setDragOverLane] = useState<OrchestraTask["lane"] | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
@@ -795,6 +803,10 @@ export function OrchestraBoard() {
     () => sortCommandTasks(commandTasks, batchStrategy, selectedCommandTaskIds),
     [batchStrategy, commandTasks, selectedCommandTaskIds],
   );
+  const selectedAdapter = useMemo(
+    () => executorAdapters.find((adapter) => adapter.id === adapterMode) ?? simulatedExecutorAdapter,
+    [adapterMode],
+  );
   const commandPackets = useMemo(
     () => orderedCommandTasks.map((task) => buildCommandPacket(board.feature, task, task.owner)),
     [board.feature, orderedCommandTasks],
@@ -821,6 +833,7 @@ export function OrchestraBoard() {
           timeline: OrchestraTimelineEvent[];
           selectedCommandTaskIds?: string[];
           batchStrategy?: BatchStrategy;
+          adapterMode?: ExecutorAdapterMode;
         };
 
         const normalizedBoard = normalizeBoard(parsed.board);
@@ -831,6 +844,7 @@ export function OrchestraBoard() {
         setTimeline(parsed.timeline ?? []);
         setSelectedCommandTaskIds(parsed.selectedCommandTaskIds ?? []);
         setBatchStrategy(parsed.batchStrategy ?? "manual");
+        setAdapterMode(parsed.adapterMode ?? "simulated-local");
         setTitle(normalizedBoard.feature.title);
         setProblem(normalizedBoard.feature.problem);
         setGoals(normalizedBoard.feature.goals.join("\n"));
@@ -859,9 +873,10 @@ export function OrchestraBoard() {
         timeline,
         selectedCommandTaskIds,
         batchStrategy,
+        adapterMode,
       }),
     );
-  }, [batchStrategy, batchSummaries, board, selectedTaskId, runHistory, timeline, selectedCommandTaskIds]);
+  }, [adapterMode, batchStrategy, batchSummaries, board, selectedTaskId, runHistory, timeline, selectedCommandTaskIds]);
 
   function handleGeneratePlan() {
     const idea: OrchestraFeatureIdea = {
@@ -883,6 +898,7 @@ export function OrchestraBoard() {
     setTimeline([]);
     setSelectedCommandTaskIds([]);
     setBatchStrategy("manual");
+    setAdapterMode("simulated-local");
   }
 
   function applyScenario(scenario: OrchestraScenario) {
@@ -902,6 +918,7 @@ export function OrchestraBoard() {
     setTimeline([]);
     setSelectedCommandTaskIds([]);
     setBatchStrategy("manual");
+    setAdapterMode("simulated-local");
   }
 
   function resetDemo() {
@@ -920,6 +937,7 @@ export function OrchestraBoard() {
     setSelectedScenarioId(orchestraScenarios[0]?.id ?? "");
     setSelectedCommandTaskIds([]);
     setBatchStrategy("manual");
+    setAdapterMode("simulated-local");
   }
 
   function handleGenerateHandoff(task: OrchestraTask) {
@@ -945,7 +963,7 @@ export function OrchestraBoard() {
     }
 
     const executionLog = runBatchWithAdapter({
-      adapter: simulatedExecutorAdapter,
+      adapter: selectedAdapter,
       board,
       tasks: orderedCommandTasks,
       packets: commandPackets,
@@ -963,6 +981,7 @@ export function OrchestraBoard() {
       id: `batch-${Date.now()}`,
       createdAt: new Date().toISOString(),
       strategy: batchStrategy,
+      adapterMode,
       total: executionLog.length,
       succeeded: executionLog.filter((item) => item.status === "succeeded").length,
       failed: executionLog.filter((item) => item.status === "failed").length,
@@ -2088,10 +2107,32 @@ export function OrchestraBoard() {
                 {locale === "zh" ? "Commander 控制台" : "Commander Console"}
               </CardTitle>
               <CardDescription>
-                {locale === "zh" ? "这里会生成单任务或批量 handoff，并用本地模拟模式演示 run。" : "This generates single-task or batch handoffs and demonstrates runs in local simulation mode."}
+                {locale === "zh" ? "这里会生成单任务或批量 handoff，并通过可切换的 executor adapter 演示执行。" : "This generates single-task or batch handoffs and demonstrates execution through switchable executor adapters."}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
+              <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                <div className="grid gap-3 md:grid-cols-[220px_1fr] md:items-center">
+                  <label className="grid gap-2 text-sm">
+                    <span className="font-medium text-slate-700">{locale === "zh" ? "执行模式" : "Execution Mode"}</span>
+                    <select
+                      value={adapterMode}
+                      onChange={(event) => setAdapterMode(event.target.value as ExecutorAdapterMode)}
+                      className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm outline-none focus:border-slate-300"
+                    >
+                      {executorAdapters.map((adapter) => (
+                        <option key={adapter.id} value={adapter.id}>
+                          {adapter.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
+                    <div className="text-sm font-medium text-slate-900">{selectedAdapter.name}</div>
+                    <p className="mt-2 text-sm leading-6 text-slate-600">{selectedAdapter.description}</p>
+                  </div>
+                </div>
+              </div>
               <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
                 <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                   <div>
@@ -2155,6 +2196,9 @@ export function OrchestraBoard() {
                               ? "Commander 会保留每个任务自己的执行者，但把这批任务作为一个执行批次来下发。"
                               : "Commander preserves each task executor but issues them as one execution batch."
                             : packet.reasoning}
+                        </p>
+                        <p className="mt-2 text-xs text-slate-500">
+                          {locale === "zh" ? "当前 adapter：" : "Current adapter: "} {selectedAdapter.name}
                         </p>
                       </div>
                       <Badge className={cn("rounded-full", ownerTone[packet.executor])}>
@@ -2336,7 +2380,7 @@ export function OrchestraBoard() {
                               : `${summary.total}-task batch`}
                           </div>
                           <p className="mt-1 text-xs text-slate-500">
-                            {new Date(summary.createdAt).toLocaleString()} · {batchStrategyLabel[locale][summary.strategy]}
+                            {new Date(summary.createdAt).toLocaleString()} · {batchStrategyLabel[locale][summary.strategy]} · {(executorAdapters.find((adapter) => adapter.id === summary.adapterMode) ?? simulatedExecutorAdapter).name}
                           </p>
                         </div>
                         <div className="flex flex-wrap gap-2">
