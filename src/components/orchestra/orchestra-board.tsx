@@ -1269,14 +1269,19 @@ export function OrchestraBoard() {
 
   return (
     <div className="mx-auto flex max-w-7xl flex-col gap-6 pb-10">
-      <section className="grid gap-4 xl:grid-cols-[1.3fr_0.7fr]">
-        <Card className="border-slate-200/80 bg-[linear-gradient(135deg,_#ffffff_0%,_#f8fbff_60%,_#f8fafc_100%)] shadow-[0_18px_40px_-30px_rgba(15,23,42,0.35)]">
-          <CardContent className="grid gap-4 p-5 md:grid-cols-[1fr_auto] md:items-end">
-            <div className="space-y-4">
+      <section className="grid gap-4 xl:grid-cols-[1.45fr_0.55fr]">
+        <Card className="border-slate-200/80 bg-[linear-gradient(135deg,_#ffffff_0%,_#f8fbff_58%,_#f8fafc_100%)] shadow-[0_18px_40px_-30px_rgba(15,23,42,0.35)]">
+          <CardContent className="space-y-4 p-5">
+            <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="flex flex-wrap items-center gap-2">
                 <Badge className="rounded-full bg-slate-950 px-3 py-1 text-white shadow-sm">
                   {locale === "zh" ? "Orchestra 工作台" : "Orchestra Workspace"}
                 </Badge>
+                <span className="text-sm text-slate-500">
+                  {locale === "zh" ? "先定义目标，再直接推进执行。" : "Define the goal, then move straight into execution."}
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
                 <div className="flex rounded-full border border-slate-200 bg-white p-1 shadow-sm">
                   {(["zh", "en"] as const).map((value) => (
                     <button
@@ -1292,40 +1297,56 @@ export function OrchestraBoard() {
                     </button>
                   ))}
                 </div>
-              </div>
-              <div className="grid gap-3 lg:grid-cols-[1.2fr_1fr]">
-                <label className="grid gap-2 text-sm">
-                  <span className="font-medium text-slate-700">{locale === "zh" ? "当前 Feature" : "Current Feature"}</span>
-                  <Input value={title} onChange={(event) => setTitle(event.target.value)} />
-                </label>
-                <label className="grid gap-2 text-sm">
-                  <span className="font-medium text-slate-700">{locale === "zh" ? "当前问题" : "Current Problem"}</span>
-                  <Textarea value={problem} onChange={(event) => setProblem(event.target.value)} className="min-h-24" />
-                </label>
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
-                <Button onClick={handleGeneratePlan} className="rounded-full bg-slate-950 px-5 text-white shadow-sm hover:bg-slate-800">
+                <Button onClick={handleGeneratePlan} className="rounded-full bg-slate-950 px-4 text-white shadow-sm hover:bg-slate-800">
                   <Sparkles className="h-4 w-4" />
-                  {locale === "zh" ? "生成 / 刷新计划" : "Generate / Refresh Plan"}
-                </Button>
-                <Button variant="outline" className="rounded-full border-slate-200 bg-white shadow-sm" onClick={() => applyScenario(selectedScenario)}>
-                  {locale === "zh" ? "载入当前示例" : "Load Selected Scenario"}
-                </Button>
-                <Button variant="ghost" className="rounded-full" onClick={resetDemo}>
-                  {locale === "zh" ? "重置" : "Reset"}
+                  {locale === "zh" ? "生成计划" : "Generate Plan"}
                 </Button>
               </div>
             </div>
-            <div className="grid min-w-[280px] grid-cols-3 gap-3">
-              <MetricCard icon={Clipboard} label={locale === "zh" ? "可见任务" : "Visible"} value={`${visibleTasks.length}/${board.tasks.length}`} />
-              <MetricCard icon={Cpu} label={locale === "zh" ? "进行中" : "In Flight"} value={String(board.tasks.filter((task) => task.state === "in_progress" || task.state === "review").length)} />
-              <MetricCard icon={CheckCircle2} label={locale === "zh" ? "已完成" : "Done"} value={String(board.tasks.filter((task) => task.state === "done").length)} />
+
+            <div className="grid gap-3 xl:grid-cols-[1.15fr_0.95fr_auto] xl:items-stretch">
+              <div className="rounded-[22px] border border-slate-200 bg-white/85 p-4 shadow-sm">
+                <div className="text-xs uppercase tracking-[0.18em] text-slate-500">
+                  {locale === "zh" ? "当前 Feature" : "Current Feature"}
+                </div>
+                <Input
+                  value={title}
+                  onChange={(event) => setTitle(event.target.value)}
+                  className="mt-2 h-11 border-0 bg-transparent px-0 text-lg font-semibold text-slate-950 shadow-none focus-visible:ring-0"
+                />
+              </div>
+
+              <div className="rounded-[22px] border border-slate-200 bg-white/85 p-4 shadow-sm">
+                <div className="text-xs uppercase tracking-[0.18em] text-slate-500">
+                  {locale === "zh" ? "当前问题" : "Current Problem"}
+                </div>
+                <Textarea
+                  value={problem}
+                  onChange={(event) => setProblem(event.target.value)}
+                  className="mt-2 min-h-[92px] resize-none border-0 bg-transparent px-0 py-0 text-sm leading-6 text-slate-700 shadow-none focus-visible:ring-0"
+                />
+              </div>
+
+              <div className="grid min-w-[240px] grid-cols-3 gap-3 xl:grid-cols-1">
+                <MetricCard icon={Clipboard} label={locale === "zh" ? "可见任务" : "Visible"} value={`${visibleTasks.length}/${board.tasks.length}`} compact />
+                <MetricCard icon={Cpu} label={locale === "zh" ? "进行中" : "In Flight"} value={String(board.tasks.filter((task) => task.state === "in_progress" || task.state === "review").length)} compact />
+                <MetricCard icon={CheckCircle2} label={locale === "zh" ? "已完成" : "Done"} value={String(board.tasks.filter((task) => task.state === "done").length)} compact />
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <Button variant="outline" className="rounded-full border-slate-200 bg-white shadow-sm" onClick={() => applyScenario(selectedScenario)}>
+                {locale === "zh" ? "载入当前示例" : "Load Selected Scenario"}
+              </Button>
+              <Button variant="ghost" className="rounded-full text-slate-600" onClick={resetDemo}>
+                {locale === "zh" ? "重置" : "Reset"}
+              </Button>
             </div>
           </CardContent>
         </Card>
 
         <Card className="border-slate-200/80 shadow-[0_18px_40px_-30px_rgba(15,23,42,0.35)]">
-          <CardHeader className="pb-3">
+          <CardHeader className="pb-2">
             <CardTitle className="flex items-center gap-2 text-slate-950">
               <Flag className="h-5 w-5 text-emerald-600" />
               {locale === "zh" ? "当前工作流" : "Workflow"}
@@ -1334,19 +1355,22 @@ export function OrchestraBoard() {
           <CardContent className="space-y-2 text-sm leading-6 text-slate-600">
             {(locale === "zh"
               ? [
-                  "1. 定义当前 feature 和问题。",
-                  "2. 生成任务图并检查 ready / blocked。",
-                  "3. 选任务，编辑细节、依赖和评论。",
-                  "4. 选择批次并执行，再根据结果继续下一轮。",
+                  "定义 feature 和问题",
+                  "生成任务图，确认 ready / blocked",
+                  "选任务，补细节和依赖",
+                  "批量执行，再进入下一轮",
                 ]
               : [
-                  "1. Define the current feature and problem.",
-                  "2. Generate the task graph and inspect ready / blocked work.",
-                  "3. Select tasks and edit details, dependencies, and comments.",
-                  "4. Build a batch, run it, and iterate from the result.",
-                ]).map((step) => (
-              <div key={step} className="rounded-2xl border border-slate-200 bg-slate-50/80 px-3 py-2">
-                {step}
+                  "Define the feature and problem",
+                  "Generate the task graph and inspect ready / blocked",
+                  "Select tasks and edit details and dependencies",
+                  "Run a batch and iterate from the result",
+                ]).map((step, index) => (
+              <div key={step} className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50/80 px-3 py-2.5">
+                <div className="flex h-6 w-6 items-center justify-center rounded-full bg-white text-xs font-semibold text-slate-500">
+                  {index + 1}
+                </div>
+                <span>{step}</span>
               </div>
             ))}
           </CardContent>
@@ -1448,81 +1472,96 @@ export function OrchestraBoard() {
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="rounded-[26px] border border-slate-200 bg-slate-50/80 p-4">
-              <div className="grid gap-3 xl:grid-cols-[1.2fr_repeat(4,minmax(0,1fr))]">
-                <label className="grid gap-2 text-sm xl:col-span-1">
-                  <span className="font-medium text-slate-700">{locale === "zh" ? "搜索任务" : "Search"}</span>
-                  <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-sm">
-                    <Search className="h-4 w-4 text-slate-400" />
-                    <input
-                      value={searchQuery}
-                      onChange={(event) => setSearchQuery(event.target.value)}
-                      placeholder={locale === "zh" ? "标题、摘要、评论、验收标准" : "Title, summary, comments, acceptance"}
-                      className="w-full bg-transparent text-sm text-slate-700 outline-none"
-                    />
-                  </div>
-                </label>
-                <label className="grid gap-2 text-sm">
-                  <span className="font-medium text-slate-700">{locale === "zh" ? "状态" : "State"}</span>
-                  <select
-                    value={stateFilter}
-                    onChange={(event) => setStateFilter(event.target.value as OrchestraTaskState | "all")}
-                    className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm outline-none focus:border-slate-300"
-                  >
-                    <option value="all">{locale === "zh" ? "全部状态" : "All states"}</option>
-                    {(Object.keys(statusLabel.en) as OrchestraTaskState[]).map((state) => (
-                      <option key={state} value={state}>
-                        {statusLabel[locale][state]}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label className="grid gap-2 text-sm">
-                  <span className="font-medium text-slate-700">{locale === "zh" ? "归属" : "Owner"}</span>
-                  <select
-                    value={ownerFilter}
-                    onChange={(event) => setOwnerFilter(event.target.value as OrchestraExecutor | "all")}
-                    className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm outline-none focus:border-slate-300"
-                  >
-                    <option value="all">{locale === "zh" ? "全部归属" : "All owners"}</option>
-                    {(["planner", "commander", "codex", "claude_code", "portfolio", "human"] as OrchestraExecutor[]).map((owner) => (
-                      <option key={owner} value={owner}>
-                        {ownerLabel(owner, locale)}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label className="grid gap-2 text-sm">
-                  <span className="font-medium text-slate-700">{locale === "zh" ? "优先级" : "Priority"}</span>
-                  <select
-                    value={priorityFilter}
-                    onChange={(event) => setPriorityFilter(event.target.value as OrchestraTaskPriority | "all")}
-                    className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm outline-none focus:border-slate-300"
-                  >
-                    <option value="all">{locale === "zh" ? "全部优先级" : "All priorities"}</option>
-                    {(["low", "medium", "high", "critical"] as OrchestraTaskPriority[]).map((priority) => (
-                      <option key={priority} value={priority}>
-                        {priorityLabel[locale][priority]}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label className="grid gap-2 text-sm">
-                  <span className="font-medium text-slate-700">{locale === "zh" ? "泳道" : "Lane"}</span>
-                  <select
-                    value={laneFilter}
-                    onChange={(event) => setLaneFilter(event.target.value as OrchestraTask["lane"] | "all")}
-                    className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm outline-none focus:border-slate-300"
-                  >
-                    <option value="all">{locale === "zh" ? "全部泳道" : "All lanes"}</option>
-                    {laneOrder.map((lane) => (
-                      <option key={lane} value={lane}>
-                        {laneLabels[locale][lane]}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <div className="text-sm font-medium text-slate-900">{locale === "zh" ? "任务筛选" : "Task Filters"}</div>
+                  <p className="mt-1 text-xs text-slate-500">
+                    {locale === "zh" ? "先缩小范围，再去拖拽、编辑或批量执行。" : "Narrow the scope first, then drag, edit, or run a batch."}
+                  </p>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="rounded-full"
+                  onClick={() => {
+                    setSearchQuery("");
+                    setQuickFilter("all");
+                    setLaneFilter("all");
+                    setStateFilter("all");
+                    setOwnerFilter("all");
+                    setPriorityFilter("all");
+                  }}
+                >
+                  {locale === "zh" ? "清空筛选" : "Clear Filters"}
+                </Button>
               </div>
-              <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+
+              <div className="mt-3 grid gap-3 lg:grid-cols-[minmax(0,1.45fr)_repeat(4,minmax(0,0.8fr))]">
+                <div className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-3 shadow-sm">
+                  <Search className="h-4 w-4 text-slate-400" />
+                  <input
+                    value={searchQuery}
+                    onChange={(event) => setSearchQuery(event.target.value)}
+                    placeholder={locale === "zh" ? "搜索标题、摘要、评论、验收标准" : "Search title, summary, comments, acceptance"}
+                    aria-label={locale === "zh" ? "搜索任务" : "Search tasks"}
+                    className="w-full bg-transparent text-sm text-slate-700 outline-none"
+                  />
+                </div>
+                <select
+                  value={stateFilter}
+                  onChange={(event) => setStateFilter(event.target.value as OrchestraTaskState | "all")}
+                  aria-label={locale === "zh" ? "按状态筛选" : "Filter by state"}
+                  className="rounded-2xl border border-slate-200 bg-white px-3 py-3 text-sm text-slate-700 shadow-sm outline-none focus:border-slate-300"
+                >
+                  <option value="all">{locale === "zh" ? "状态：全部" : "State: All"}</option>
+                  {(Object.keys(statusLabel.en) as OrchestraTaskState[]).map((state) => (
+                    <option key={state} value={state}>
+                      {statusLabel[locale][state]}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  value={ownerFilter}
+                  onChange={(event) => setOwnerFilter(event.target.value as OrchestraExecutor | "all")}
+                  aria-label={locale === "zh" ? "按归属筛选" : "Filter by owner"}
+                  className="rounded-2xl border border-slate-200 bg-white px-3 py-3 text-sm text-slate-700 shadow-sm outline-none focus:border-slate-300"
+                >
+                  <option value="all">{locale === "zh" ? "归属：全部" : "Owner: All"}</option>
+                  {(["planner", "commander", "codex", "claude_code", "portfolio", "human"] as OrchestraExecutor[]).map((owner) => (
+                    <option key={owner} value={owner}>
+                      {ownerLabel(owner, locale)}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  value={priorityFilter}
+                  onChange={(event) => setPriorityFilter(event.target.value as OrchestraTaskPriority | "all")}
+                  aria-label={locale === "zh" ? "按优先级筛选" : "Filter by priority"}
+                  className="rounded-2xl border border-slate-200 bg-white px-3 py-3 text-sm text-slate-700 shadow-sm outline-none focus:border-slate-300"
+                >
+                  <option value="all">{locale === "zh" ? "优先级：全部" : "Priority: All"}</option>
+                  {(["low", "medium", "high", "critical"] as OrchestraTaskPriority[]).map((priority) => (
+                    <option key={priority} value={priority}>
+                      {priorityLabel[locale][priority]}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  value={laneFilter}
+                  onChange={(event) => setLaneFilter(event.target.value as OrchestraTask["lane"] | "all")}
+                  aria-label={locale === "zh" ? "按泳道筛选" : "Filter by lane"}
+                  className="rounded-2xl border border-slate-200 bg-white px-3 py-3 text-sm text-slate-700 shadow-sm outline-none focus:border-slate-300"
+                >
+                  <option value="all">{locale === "zh" ? "泳道：全部" : "Lane: All"}</option>
+                  {laneOrder.map((lane) => (
+                    <option key={lane} value={lane}>
+                      {laneLabels[locale][lane]}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="mt-3 flex flex-wrap items-center gap-2">
                 <div className="flex flex-wrap gap-2">
                   {(["all", "ready", "blocked", "critical"] as QuickFilter[]).map((filter) => (
                     <button
@@ -1540,21 +1579,6 @@ export function OrchestraBoard() {
                     </button>
                   ))}
                 </div>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="rounded-full"
-                  onClick={() => {
-                    setSearchQuery("");
-                    setQuickFilter("all");
-                    setLaneFilter("all");
-                    setStateFilter("all");
-                    setOwnerFilter("all");
-                    setPriorityFilter("all");
-                  }}
-                >
-                  {locale === "zh" ? "清空筛选" : "Clear Filters"}
-                </Button>
               </div>
             </div>
             <div className="grid gap-4 xl:grid-cols-2">
@@ -2631,14 +2655,17 @@ export function OrchestraBoard() {
   );
 }
 
-function MetricCard({ icon: Icon, label, value }: { icon: typeof Clipboard; label: string; value: string }) {
+function MetricCard({ icon: Icon, label, value, compact = false }: { icon: typeof Clipboard; label: string; value: string; compact?: boolean }) {
   return (
-    <div className="rounded-2xl border border-white/70 bg-white/80 p-4 shadow-sm backdrop-blur">
+    <div className={cn(
+      "rounded-2xl border border-white/70 bg-white/80 shadow-sm backdrop-blur",
+      compact ? "p-3" : "p-4",
+    )}>
       <div className="flex items-center gap-2 text-slate-500">
-        <Icon className="h-4 w-4" />
-        <span className="text-xs uppercase tracking-[0.18em]">{label}</span>
+        <Icon className={compact ? "h-3.5 w-3.5" : "h-4 w-4"} />
+        <span className={cn("uppercase tracking-[0.18em]", compact ? "text-[10px]" : "text-xs")}>{label}</span>
       </div>
-      <div className="mt-3 text-2xl font-semibold text-slate-950">{value}</div>
+      <div className={cn("font-semibold text-slate-950", compact ? "mt-2 text-xl" : "mt-3 text-2xl")}>{value}</div>
     </div>
   );
 }
