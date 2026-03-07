@@ -1269,19 +1269,19 @@ export function OrchestraBoard() {
 
   return (
     <div className="mx-auto flex max-w-7xl flex-col gap-6 pb-10">
-      <section className="grid gap-4 xl:grid-cols-[1.45fr_0.55fr]">
+      <section className="grid gap-3">
         <Card className="border-slate-200/80 bg-[linear-gradient(135deg,_#ffffff_0%,_#f8fbff_58%,_#f8fafc_100%)] shadow-[0_18px_40px_-30px_rgba(15,23,42,0.35)]">
-          <CardContent className="space-y-4 p-5">
+          <CardContent className="space-y-3 p-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="flex flex-wrap items-center gap-2">
                 <Badge className="rounded-full bg-slate-950 px-3 py-1 text-white shadow-sm">
                   {locale === "zh" ? "Orchestra 工作台" : "Orchestra Workspace"}
                 </Badge>
                 <span className="text-sm text-slate-500">
-                  {locale === "zh" ? "先定义目标，再直接推进执行。" : "Define the goal, then move straight into execution."}
+                  {locale === "zh" ? "定义目标，筛选任务，直接执行。" : "Define the goal, filter the work, and execute."}
                 </span>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <div className="flex rounded-full border border-slate-200 bg-white p-1 shadow-sm">
                   {(["zh", "en"] as const).map((value) => (
                     <button
@@ -1301,78 +1301,65 @@ export function OrchestraBoard() {
                   <Sparkles className="h-4 w-4" />
                   {locale === "zh" ? "生成计划" : "Generate Plan"}
                 </Button>
+                <Button variant="outline" className="rounded-full border-slate-200 bg-white shadow-sm" onClick={() => applyScenario(selectedScenario)}>
+                  {locale === "zh" ? "载入示例" : "Load Scenario"}
+                </Button>
+                <Button variant="ghost" className="rounded-full text-slate-600" onClick={resetDemo}>
+                  {locale === "zh" ? "重置" : "Reset"}
+                </Button>
               </div>
             </div>
 
-            <div className="grid gap-3 xl:grid-cols-[1.15fr_0.95fr_auto] xl:items-stretch">
-              <div className="rounded-[22px] border border-slate-200 bg-white/85 p-4 shadow-sm">
-                <div className="text-xs uppercase tracking-[0.18em] text-slate-500">
-                  {locale === "zh" ? "当前 Feature" : "Current Feature"}
+            <div className="grid gap-3 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,1.3fr)_auto]">
+              <div className="rounded-[20px] border border-slate-200 bg-white/88 px-4 py-3 shadow-sm">
+                <div className="text-[11px] uppercase tracking-[0.18em] text-slate-500">
+                  {locale === "zh" ? "Feature" : "Feature"}
                 </div>
                 <Input
                   value={title}
                   onChange={(event) => setTitle(event.target.value)}
-                  className="mt-2 h-11 border-0 bg-transparent px-0 text-lg font-semibold text-slate-950 shadow-none focus-visible:ring-0"
+                  className="mt-1 h-9 border-0 bg-transparent px-0 text-base font-semibold text-slate-950 shadow-none focus-visible:ring-0"
                 />
               </div>
 
-              <div className="rounded-[22px] border border-slate-200 bg-white/85 p-4 shadow-sm">
-                <div className="text-xs uppercase tracking-[0.18em] text-slate-500">
-                  {locale === "zh" ? "当前问题" : "Current Problem"}
+              <div className="rounded-[20px] border border-slate-200 bg-white/88 px-4 py-3 shadow-sm">
+                <div className="text-[11px] uppercase tracking-[0.18em] text-slate-500">
+                  {locale === "zh" ? "问题 / Brief" : "Problem / Brief"}
                 </div>
                 <Textarea
                   value={problem}
                   onChange={(event) => setProblem(event.target.value)}
-                  className="mt-2 min-h-[92px] resize-none border-0 bg-transparent px-0 py-0 text-sm leading-6 text-slate-700 shadow-none focus-visible:ring-0"
+                  className="mt-1 min-h-[72px] resize-none border-0 bg-transparent px-0 py-0 text-sm leading-6 text-slate-700 shadow-none focus-visible:ring-0"
                 />
               </div>
 
-              <div className="grid min-w-[240px] grid-cols-3 gap-3 xl:grid-cols-1">
-                <MetricCard icon={Clipboard} label={locale === "zh" ? "可见任务" : "Visible"} value={`${visibleTasks.length}/${board.tasks.length}`} compact />
+              <div className="grid min-w-[250px] grid-cols-3 gap-2 xl:grid-cols-3">
+                <MetricCard icon={Clipboard} label={locale === "zh" ? "可见" : "Visible"} value={`${visibleTasks.length}/${board.tasks.length}`} compact />
                 <MetricCard icon={Cpu} label={locale === "zh" ? "进行中" : "In Flight"} value={String(board.tasks.filter((task) => task.state === "in_progress" || task.state === "review").length)} compact />
-                <MetricCard icon={CheckCircle2} label={locale === "zh" ? "已完成" : "Done"} value={String(board.tasks.filter((task) => task.state === "done").length)} compact />
+                <MetricCard icon={CheckCircle2} label={locale === "zh" ? "完成" : "Done"} value={String(board.tasks.filter((task) => task.state === "done").length)} compact />
               </div>
             </div>
 
-            <div className="flex flex-wrap items-center gap-2">
-              <Button variant="outline" className="rounded-full border-slate-200 bg-white shadow-sm" onClick={() => applyScenario(selectedScenario)}>
-                {locale === "zh" ? "载入当前示例" : "Load Selected Scenario"}
-              </Button>
-              <Button variant="ghost" className="rounded-full text-slate-600" onClick={resetDemo}>
-                {locale === "zh" ? "重置" : "Reset"}
-              </Button>
+            <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
+              <Flag className="h-3.5 w-3.5 text-emerald-600" />
+              {(locale === "zh"
+                ? [
+                    "1. 定义目标",
+                    "2. 生成任务图",
+                    "3. 选任务并编辑",
+                    "4. 批量执行",
+                  ]
+                : [
+                    "1. Define goal",
+                    "2. Generate graph",
+                    "3. Select and edit",
+                    "4. Run batch",
+                  ]).map((step) => (
+                <span key={step} className="rounded-full border border-slate-200 bg-white/80 px-2.5 py-1">
+                  {step}
+                </span>
+              ))}
             </div>
-          </CardContent>
-        </Card>
-
-        <Card className="border-slate-200/80 shadow-[0_18px_40px_-30px_rgba(15,23,42,0.35)]">
-          <CardHeader className="pb-2">
-            <CardTitle className="flex items-center gap-2 text-slate-950">
-              <Flag className="h-5 w-5 text-emerald-600" />
-              {locale === "zh" ? "当前工作流" : "Workflow"}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2 text-sm leading-6 text-slate-600">
-            {(locale === "zh"
-              ? [
-                  "定义 feature 和问题",
-                  "生成任务图，确认 ready / blocked",
-                  "选任务，补细节和依赖",
-                  "批量执行，再进入下一轮",
-                ]
-              : [
-                  "Define the feature and problem",
-                  "Generate the task graph and inspect ready / blocked",
-                  "Select tasks and edit details and dependencies",
-                  "Run a batch and iterate from the result",
-                ]).map((step, index) => (
-              <div key={step} className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50/80 px-3 py-2.5">
-                <div className="flex h-6 w-6 items-center justify-center rounded-full bg-white text-xs font-semibold text-slate-500">
-                  {index + 1}
-                </div>
-                <span>{step}</span>
-              </div>
-            ))}
           </CardContent>
         </Card>
       </section>
@@ -1637,68 +1624,83 @@ export function OrchestraBoard() {
                             handleTaskDrop(lane, index);
                           }}
                           className={cn(
-                            "rounded-2xl border border-slate-200 bg-[linear-gradient(180deg,_#ffffff_0%,_#fbfdff_100%)] p-4 shadow-[0_12px_30px_-24px_rgba(15,23,42,0.45)] transition-all",
+                            "rounded-2xl border border-slate-200 bg-[linear-gradient(180deg,_#ffffff_0%,_#fbfdff_100%)] p-3.5 shadow-[0_12px_30px_-24px_rgba(15,23,42,0.45)] transition-all",
                             selectedTaskId === task.id && "border-slate-300 ring-2 ring-slate-950/10",
                             draggedTaskId === task.id && "scale-[0.985] opacity-60",
                             dragOverLane === lane && dragOverIndex === index && "border-sky-300",
                           )}
                         >
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="flex items-start gap-3">
-                            <button
-                              type="button"
-                              className="mt-0.5 text-slate-300 transition-colors hover:text-slate-500"
-                              aria-label={locale === "zh" ? "拖拽任务" : "Drag task"}
-                            >
-                              <GripVertical className="h-4 w-4" />
-                            </button>
-                            <label className="mt-0.5">
-                              <input
-                                type="checkbox"
-                                checked={selectedCommandTaskIds.includes(task.id)}
-                                onChange={(event) => handleTaskSelection(task.id, event.target.checked)}
-                                className="h-4 w-4 rounded border-slate-300"
-                              />
-                            </label>
-                            <div>
-                            <div className="text-base font-semibold text-slate-900">{translatedTask.title}</div>
-                            <p className="mt-1 text-sm leading-7 text-slate-600">{translatedTask.summary}</p>
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-start gap-2.5">
+                                <button
+                                  type="button"
+                                  className="mt-0.5 text-slate-300 transition-colors hover:text-slate-500"
+                                  aria-label={locale === "zh" ? "拖拽任务" : "Drag task"}
+                                >
+                                  <GripVertical className="h-4 w-4" />
+                                </button>
+                                <label className="mt-0.5">
+                                  <input
+                                    type="checkbox"
+                                    checked={selectedCommandTaskIds.includes(task.id)}
+                                    onChange={(event) => handleTaskSelection(task.id, event.target.checked)}
+                                    className="h-4 w-4 rounded border-slate-300"
+                                  />
+                                </label>
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <div className="truncate text-[15px] font-semibold text-slate-900">{translatedTask.title}</div>
+                                    <Badge className={cn("rounded-full border", stateTone[task.state])}>{statusLabel[locale][task.state]}</Badge>
+                                  </div>
+                                  <p className="mt-1 line-clamp-2 text-sm leading-6 text-slate-600">{translatedTask.summary}</p>
+                                </div>
+                              </div>
                             </div>
                           </div>
-                          <Badge className={cn("rounded-full border", stateTone[task.state])}>{statusLabel[locale][task.state]}</Badge>
-                        </div>
-                        <div className="mt-3 flex flex-wrap gap-2">
-                          <Badge className={cn("rounded-full", ownerTone[task.owner])}>{ownerLabel(task.owner, locale)}</Badge>
-                          <Badge variant="outline" className="rounded-full border-slate-300 text-slate-600">
-                            {kindLabel(task.kind, locale)}
-                          </Badge>
-                          <Badge className={cn("rounded-full border", priorityTone[task.priority])}>
-                            {locale === "zh" ? "优先级" : "Priority"}: {priorityLabel[locale][task.priority]}
-                          </Badge>
-                          {task.dependsOn.length > 0 ? (
+                          <div className="mt-3 flex flex-wrap items-center gap-2">
+                            <Badge className={cn("rounded-full", ownerTone[task.owner])}>{ownerLabel(task.owner, locale)}</Badge>
                             <Badge variant="outline" className="rounded-full border-slate-300 text-slate-600">
-                              {locale === "zh" ? `依赖 ${task.dependsOn.length} 项` : `depends on ${task.dependsOn.length}`}
+                              {kindLabel(task.kind, locale)}
                             </Badge>
+                            <Badge className={cn("rounded-full border", priorityTone[task.priority])}>
+                              {priorityLabel[locale][task.priority]}
+                            </Badge>
+                            {task.dependsOn.length > 0 ? (
+                              <Badge variant="outline" className="rounded-full border-slate-300 text-slate-600">
+                                {locale === "zh" ? `依赖 ${task.dependsOn.length}` : `${task.dependsOn.length} deps`}
+                              </Badge>
+                            ) : null}
+                          </div>
+                          {translatedTask.acceptance.length > 0 ? (
+                            <div className="mt-3 rounded-xl bg-slate-50/80 px-3 py-2">
+                              <div className="space-y-1">
+                                {translatedTask.acceptance.slice(0, 2).map((criterion) => (
+                                  <div key={criterion} className="text-xs leading-5 text-slate-500">{criterion}</div>
+                                ))}
+                                {translatedTask.acceptance.length > 2 ? (
+                                  <div className="text-xs leading-5 text-slate-400">
+                                    {locale === "zh"
+                                      ? `还有 ${translatedTask.acceptance.length - 2} 条验收标准`
+                                      : `${translatedTask.acceptance.length - 2} more acceptance checks`}
+                                  </div>
+                                ) : null}
+                              </div>
+                            </div>
                           ) : null}
-                        </div>
-                        <div className="mt-3 space-y-1">
-                          {translatedTask.acceptance.map((criterion) => (
-                            <div key={criterion} className="text-xs leading-5 text-slate-500">{criterion}</div>
-                          ))}
-                        </div>
-                        <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                          <div className="text-xs text-slate-500">
-                            {locale === "zh" ? "Commander 交接目标：" : "Commander handoff target: "} {ownerLabel(task.owner, locale)}
+                          <div className="mt-3 flex items-center justify-between gap-3">
+                            <div className="text-xs text-slate-500">
+                              {locale === "zh" ? "交接目标：" : "Target: "} {ownerLabel(task.owner, locale)}
+                            </div>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <Button variant="ghost" size="sm" className="h-8 rounded-full px-3 text-slate-600 hover:bg-slate-50" onClick={() => setSelectedTaskId(task.id)}>
+                                {locale === "zh" ? "查看" : "Inspect"}
+                              </Button>
+                              <Button variant="outline" size="sm" className="h-8 rounded-full border-slate-200 bg-white px-3 shadow-sm" onClick={() => handleGenerateHandoff(task)}>
+                                {locale === "zh" ? "交接" : "Handoff"}
+                              </Button>
+                            </div>
                           </div>
-                          <div className="flex flex-wrap items-center gap-2 sm:justify-end">
-                            <Button variant="ghost" size="sm" className="rounded-full border border-transparent hover:border-slate-200 hover:bg-slate-50" onClick={() => setSelectedTaskId(task.id)}>
-                              {locale === "zh" ? "查看" : "Inspect"}
-                            </Button>
-                            <Button variant="outline" size="sm" className="rounded-full border-slate-200 bg-white shadow-sm" onClick={() => handleGenerateHandoff(task)}>
-                              {locale === "zh" ? "生成交接包" : "Generate Handoff"}
-                            </Button>
-                          </div>
-                        </div>
                         </div>
                       </div>
                     );
