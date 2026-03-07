@@ -15,6 +15,8 @@ export interface ExecutorRunResult {
   executor: CommandPacket["executor"];
   mode: "dry_run" | "live";
   command: string;
+  args: string[];
+  shellPreview: string;
   stdout: string;
   stderr: string;
   durationMs: number;
@@ -98,7 +100,9 @@ export const simulatedExecutorAdapter: OrchestraExecutorAdapter = {
     return {
       executor: packet.executor,
       mode: "dry_run",
-      command: packet.suggestedCommand,
+      command: packet.bridge.command,
+      args: packet.bridge.args,
+      shellPreview: packet.bridge.shellPreview,
       stdout: [
         `Simulated ${packet.executor} handoff.`,
         `Objective: ${packet.objective}`,
@@ -120,14 +124,20 @@ export const cliPreviewExecutorAdapter: OrchestraExecutorAdapter = {
     return {
       executor: packet.executor,
       mode: "dry_run",
-      command: packet.suggestedCommand,
+      command: packet.bridge.command,
+      args: packet.bridge.args,
+      shellPreview: packet.bridge.shellPreview,
       stdout: [
         "Prepared CLI preview handoff.",
         `Task: ${task.title}`,
-        `Command: ${packet.suggestedCommand}`,
+        `Command: ${packet.bridge.command || "(missing)"}`,
+        `Args: ${packet.bridge.args.join(" | ") || "(none)"}`,
+        `Shell preview: ${packet.bridge.shellPreview}`,
         "Next step: wire this adapter to a real Codex / Claude Code process runner.",
       ].join("\n"),
-      stderr: "No process was launched. This adapter is a preview bridge for future live execution.",
+      stderr: packet.bridge.failureHints.length
+        ? `No process was launched. ${packet.bridge.failureHints.join(" ")}`
+        : "No process was launched. This adapter is a preview bridge for future live execution.",
       durationMs: 120,
     };
   },
@@ -143,7 +153,9 @@ export const reviewerExecutorAdapter: OrchestraExecutorAdapter = {
     return {
       executor: packet.executor,
       mode: "dry_run",
-      command: packet.suggestedCommand,
+      command: packet.bridge.command,
+      args: packet.bridge.args,
+      shellPreview: packet.bridge.shellPreview,
       stdout: [
         "Prepared review-oriented execution summary.",
         `Task: ${task.title}`,
@@ -230,7 +242,9 @@ export function runBatchWithAdapter(args: {
       result: {
         executor: packets[index]?.executor ?? task.owner,
         mode: "dry_run",
-        command: packets[index]?.suggestedCommand ?? "",
+        command: packets[index]?.bridge.command ?? "",
+        args: packets[index]?.bridge.args ?? [],
+        shellPreview: packets[index]?.bridge.shellPreview ?? "",
         stdout: `Skipped ${task.title}.`,
         stderr: `${adapter.name} does not support live execution in this demo.`,
         durationMs: 0,
@@ -250,7 +264,9 @@ export function runBatchWithAdapter(args: {
         result: {
           executor: packet.executor,
           mode: "dry_run",
-          command: packet.suggestedCommand,
+          command: packet.bridge.command,
+          args: packet.bridge.args,
+          shellPreview: packet.bridge.shellPreview,
           stdout: `Skipped ${task.title}.`,
           stderr: gate.reason,
           durationMs: 0,

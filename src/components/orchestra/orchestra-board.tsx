@@ -539,7 +539,7 @@ function timelineLabel(type: OrchestraTimelineEvent["eventType"], locale: Locale
 }
 
 function buildBatchCommand(packetList: CommandPacket[]): string {
-  return packetList.map((packet) => packet.suggestedCommand).join("\n");
+  return packetList.map((packet) => packet.bridge.shellPreview).join("\n");
 }
 
 function getPriorityRank(priority: OrchestraTaskPriority): number {
@@ -641,10 +641,12 @@ function buildRunRecord(taskId: string, result: ExecutorRunResult): OrchestraRun
     executor: result.executor,
     mode: result.mode,
     status: "succeeded",
-    command: result.command.split(" ")[0] ?? result.command,
-    args: result.command.split(" ").slice(1),
+    command: result.command,
+    args: result.args,
     stdout: result.stdout,
-    stderr: result.stderr,
+    stderr: result.shellPreview
+      ? `${result.stderr}\n\nShell preview: ${result.shellPreview}`
+      : result.stderr,
     exitCode: null,
     createdAt: new Date().toISOString(),
     durationMs: result.durationMs,
@@ -1814,7 +1816,9 @@ export function OrchestraBoard() {
     setRunResult({
       executor: executionLog[executionLog.length - 1]?.result.executor ?? "commander",
       mode: executionLog[executionLog.length - 1]?.result.mode ?? "dry_run",
-      command: commandPackets.length > 1 ? buildBatchCommand(commandPackets) : commandPackets[0]?.suggestedCommand ?? "",
+      command: commandPackets.length > 1 ? "batch" : commandPackets[0]?.bridge.command ?? "",
+      args: commandPackets.length > 1 ? [] : commandPackets[0]?.bridge.args ?? [],
+      shellPreview: commandPackets.length > 1 ? buildBatchCommand(commandPackets) : commandPackets[0]?.bridge.shellPreview ?? "",
       stdout: [
         locale === "zh" ? `批次总任务数：${executionLog.length}` : `Batch tasks: ${executionLog.length}`,
         locale === "zh"
@@ -3983,13 +3987,13 @@ export function OrchestraBoard() {
                           <div className="text-xs uppercase tracking-[0.18em] text-slate-500">
                             {commandPackets.length > 1 ? "Suggested Batch Command" : "Suggested Command"}
                           </div>
-                          <pre className="mt-2 overflow-x-auto whitespace-pre-wrap text-sm leading-6 text-slate-700"><code>{commandPackets.length > 1 ? buildBatchCommand(commandPackets) : packet.suggestedCommand}</code></pre>
+                          <pre className="mt-2 overflow-x-auto whitespace-pre-wrap text-sm leading-6 text-slate-700"><code>{commandPackets.length > 1 ? buildBatchCommand(commandPackets) : packet.bridge.shellPreview}</code></pre>
                         </div>
                         <Button
                           variant="outline"
                           size="sm"
                           className="rounded-full border-slate-200 bg-white shadow-sm"
-                          onClick={() => handleCopy(commandPackets.length > 1 ? buildBatchCommand(commandPackets) : packet.suggestedCommand)}
+                          onClick={() => handleCopy(commandPackets.length > 1 ? buildBatchCommand(commandPackets) : packet.bridge.shellPreview)}
                         >
                           <Copy className="h-4 w-4" />
                           {locale === "zh" ? "复制命令" : "Copy"}
@@ -4009,6 +4013,27 @@ export function OrchestraBoard() {
                           {locale === "zh" ? "运行并装载下一批" : "Run + Next Queue"}
                         </Button>
                       </div>
+                      {commandPackets.length === 1 ? (
+                        <div className="grid gap-3 md:grid-cols-3">
+                          <div className="rounded-2xl border border-slate-200 bg-white/80 px-4 py-3">
+                            <div className="text-xs uppercase tracking-[0.18em] text-slate-500">
+                              {locale === "zh" ? "Command" : "Command"}
+                            </div>
+                            <div className="mt-2 text-sm font-medium text-slate-900">{packet.bridge.command || (locale === "zh" ? "未生成" : "Missing")}</div>
+                          </div>
+                          <div className="rounded-2xl border border-slate-200 bg-white/80 px-4 py-3 md:col-span-2">
+                            <div className="text-xs uppercase tracking-[0.18em] text-slate-500">
+                              {locale === "zh" ? "Args" : "Args"}
+                            </div>
+                            <pre className="mt-2 overflow-x-auto whitespace-pre-wrap text-sm leading-6 text-slate-700"><code>{packet.bridge.args.join(" ") || (locale === "zh" ? "无参数" : "No args")}</code></pre>
+                          </div>
+                        </div>
+                      ) : null}
+                      {commandPackets.length === 1 && packet.bridge.failureHints.length ? (
+                        <div className="rounded-2xl border border-amber-200 bg-amber-50/70 px-4 py-3 text-sm text-amber-800">
+                          {packet.bridge.failureHints.join(" ")}
+                        </div>
+                      ) : null}
                     </div>
                   </div>
 

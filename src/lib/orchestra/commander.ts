@@ -1,5 +1,13 @@
 import type { OrchestraExecutor, OrchestraFeatureIdea, OrchestraTask } from "@/lib/orchestra/types";
 
+export interface BridgeCommandSpec {
+  shellPreview: string;
+  command: string;
+  args: string[];
+  transport: "shell";
+  failureHints: string[];
+}
+
 export interface CommandPacket {
   executor: OrchestraExecutor;
   title: string;
@@ -9,6 +17,7 @@ export interface CommandPacket {
   constraints: string[];
   context: string[];
   suggestedCommand: string;
+  bridge: BridgeCommandSpec;
   prompt: string;
 }
 
@@ -51,6 +60,42 @@ function buildSuggestedCommand(executor: OrchestraExecutor, task: OrchestraTask,
   }
 
   return `echo "Route ${task.title.replace(/"/g, '\\"')} to ${ownerDisplayName(executor)}"`;
+}
+
+function tokenizeCommand(input: string): string[] {
+  const matches = input.match(/"([^"\\]|\\.)*"|'([^'\\]|\\.)*'|[^\s]+/g) ?? [];
+  return matches.map((token) => {
+    if (
+      (token.startsWith('"') && token.endsWith('"')) ||
+      (token.startsWith("'") && token.endsWith("'"))
+    ) {
+      return token.slice(1, -1);
+    }
+    return token;
+  });
+}
+
+function buildBridgeCommandSpec(command: string): BridgeCommandSpec {
+  const [head = "", ...rest] = tokenizeCommand(command);
+  const hints = [];
+
+  if (!head) {
+    hints.push("No executable command was produced.");
+  }
+  if (head && !["codex", "claude-code", "echo"].includes(head)) {
+    hints.push(`Unexpected command prefix: ${head}.`);
+  }
+  if (!rest.length) {
+    hints.push("No CLI arguments were produced.");
+  }
+
+  return {
+    shellPreview: command,
+    command: head,
+    args: rest,
+    transport: "shell",
+    failureHints: hints,
+  };
 }
 
 export function buildCommandPacket(
@@ -109,6 +154,7 @@ export function buildCommandPacket(
     "- Report blockers, risks, or unclear ownership back to Commander.",
     "- Prefer incremental, reviewable progress over broad speculative edits.",
   ].join("\n");
+  const suggestedCommand = buildSuggestedCommand(executor, task, templates);
 
   return {
     executor,
@@ -118,7 +164,8 @@ export function buildCommandPacket(
     successCriteria: task.acceptance,
     constraints,
     context,
-    suggestedCommand: buildSuggestedCommand(executor, task, templates),
+    suggestedCommand,
+    bridge: buildBridgeCommandSpec(suggestedCommand),
     prompt,
   };
 }
