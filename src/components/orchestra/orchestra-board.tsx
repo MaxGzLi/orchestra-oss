@@ -24,6 +24,8 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import {
   buildCommandPacket,
+  serializeBatchBridgePayload,
+  serializeBridgePayload,
   type CommandPacket,
   type CommandTemplateConfig,
 } from "@/lib/orchestra/commander";
@@ -31,6 +33,7 @@ import { getDefaultOrchestraBoard, orchestraAgents, orchestraScenarios } from "@
 import {
   buildExecutorDiagnostics,
   executorAdapters,
+  runnerProfiles,
   runBatchWithAdapter,
   simulatedExecutorAdapter,
   type ExecutorDiagnostic,
@@ -3912,6 +3915,32 @@ export function OrchestraBoard() {
                       ))}
                     </div>
                   </div>
+                  <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                    <div className="text-xs uppercase tracking-[0.18em] text-slate-500">
+                      {locale === "zh" ? "Runner Profiles" : "Runner Profiles"}
+                    </div>
+                    <div className="mt-4 grid gap-3 md:grid-cols-3">
+                      {runnerProfiles.map((profile) => (
+                        <div key={profile.id} className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="text-sm font-medium text-slate-900">{profile.label}</div>
+                            <Badge variant="outline" className="rounded-full border-slate-300 text-slate-600">
+                              {profile.binary}
+                            </Badge>
+                          </div>
+                          <p className="mt-2 text-sm leading-6 text-slate-600">
+                            {locale === "zh"
+                              ? ({
+                                  codex: "用于仓库上下文明确、能直接编码和测试的任务。",
+                                  claude_code: "用于分析、评审和高上下文判断更重的任务。",
+                                  system: "用于当前不适合直接交给编码 agent 的系统级回退路由。",
+                                }[profile.id])
+                              : profile.purpose}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                 </div>
               </details>
               <div className="rounded-2xl border border-slate-200 bg-white p-4">
@@ -3982,7 +4011,7 @@ export function OrchestraBoard() {
                           {commandPackets.length > 1 ? (locale === "zh" ? "Batch" : "Batch") : ownerLabel(packet.executor, locale)}
                         </Badge>
                       </div>
-                      <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto_auto] md:items-center">
+                      <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto_auto_auto] md:items-center">
                         <div className="rounded-2xl border border-slate-200 bg-white/80 px-4 py-3">
                           <div className="text-xs uppercase tracking-[0.18em] text-slate-500">
                             {commandPackets.length > 1 ? "Suggested Batch Command" : "Suggested Command"}
@@ -3997,6 +4026,15 @@ export function OrchestraBoard() {
                         >
                           <Copy className="h-4 w-4" />
                           {locale === "zh" ? "复制命令" : "Copy"}
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="rounded-full border-slate-200 bg-white shadow-sm"
+                          onClick={() => handleCopy(commandPackets.length > 1 ? serializeBatchBridgePayload(commandPackets) : serializeBridgePayload(packet))}
+                        >
+                          <Copy className="h-4 w-4" />
+                          {locale === "zh" ? "复制 Bridge JSON" : "Copy Bridge JSON"}
                         </Button>
                         <Button size="sm" className="rounded-full bg-slate-950 text-white shadow-sm hover:bg-slate-800" onClick={handleRunPacket}>
                           <Cpu className="h-4 w-4" />

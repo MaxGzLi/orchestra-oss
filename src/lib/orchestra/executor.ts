@@ -11,6 +11,13 @@ export interface ExecutorDiagnostic {
   tone: "emerald" | "amber";
 }
 
+export interface RunnerProfile {
+  id: "codex" | "claude_code" | "system";
+  label: string;
+  binary: string;
+  purpose: string;
+}
+
 export interface ExecutorRunResult {
   executor: CommandPacket["executor"];
   mode: "dry_run" | "live";
@@ -42,6 +49,27 @@ export interface OrchestraExecutorAdapter {
   commandHints: string[];
   execute(packet: CommandPacket, task: OrchestraTask, board: OrchestraBoard): ExecutorRunResult;
 }
+
+export const runnerProfiles: RunnerProfile[] = [
+  {
+    id: "codex",
+    label: "Codex CLI",
+    binary: "codex",
+    purpose: "Repository-aware code execution tasks",
+  },
+  {
+    id: "claude_code",
+    label: "Claude Code CLI",
+    binary: "claude-code",
+    purpose: "Reasoning-heavy or review-oriented execution tasks",
+  },
+  {
+    id: "system",
+    label: "System Shell",
+    binary: "echo",
+    purpose: "Fallback routing outside the primary coding agents",
+  },
+];
 
 export function isTaskRunnable(
   task: OrchestraTask,
@@ -217,6 +245,13 @@ export function buildExecutorDiagnostics(args: {
       label: "CLI hints",
       ok: true,
       detail: `Expected command prefixes: ${adapter.commandHints.join(", ")}.`,
+      tone: "emerald",
+    },
+    {
+      id: "runner-profiles",
+      label: "Runner profiles",
+      ok: true,
+      detail: `Available runners: ${runnerProfiles.map((profile) => `${profile.label} (${profile.binary})`).join(", ")}.`,
       tone: "emerald",
     },
   ];

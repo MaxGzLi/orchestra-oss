@@ -5,6 +5,7 @@ export interface BridgeCommandSpec {
   command: string;
   args: string[];
   transport: "shell";
+  runner: "codex" | "claude_code" | "system";
   failureHints: string[];
 }
 
@@ -78,6 +79,7 @@ function tokenizeCommand(input: string): string[] {
 function buildBridgeCommandSpec(command: string): BridgeCommandSpec {
   const [head = "", ...rest] = tokenizeCommand(command);
   const hints = [];
+  const runner = head === "codex" ? "codex" : head === "claude-code" ? "claude_code" : "system";
 
   if (!head) {
     hints.push("No executable command was produced.");
@@ -94,8 +96,30 @@ function buildBridgeCommandSpec(command: string): BridgeCommandSpec {
     command: head,
     args: rest,
     transport: "shell",
+    runner,
     failureHints: hints,
   };
+}
+
+export function serializeBridgePayload(packet: CommandPacket): string {
+  return JSON.stringify({
+    executor: packet.executor,
+    title: packet.title,
+    bridge: packet.bridge,
+    objective: packet.objective,
+    successCriteria: packet.successCriteria,
+    prompt: packet.prompt,
+  }, null, 2);
+}
+
+export function serializeBatchBridgePayload(packets: CommandPacket[]): string {
+  return JSON.stringify(packets.map((packet) => ({
+    executor: packet.executor,
+    title: packet.title,
+    bridge: packet.bridge,
+    objective: packet.objective,
+    successCriteria: packet.successCriteria,
+  })), null, 2);
 }
 
 export function buildCommandPacket(
