@@ -1214,6 +1214,7 @@ export function OrchestraBoard() {
     setNewTaskLane("execution");
     setNewTaskOwner("codex");
     setNewTaskPriority("medium");
+    setInspectorTab("task");
   }
 
   function handleDeleteTask() {
@@ -1239,6 +1240,11 @@ export function OrchestraBoard() {
     setPacket(null);
     setRunResult(null);
     setExpandedRunId(null);
+  }
+
+  function handleOpenTask(taskId: string) {
+    setSelectedTaskId(taskId);
+    setInspectorTab("task");
   }
 
   function handleTaskSelection(taskId: string, checked: boolean) {
@@ -1815,7 +1821,7 @@ export function OrchestraBoard() {
                               <Button size="sm" className="h-8 rounded-full bg-slate-950 px-3 text-white hover:bg-slate-800" onClick={() => handleGenerateHandoff(task)}>
                                 {locale === "zh" ? "交接" : "Handoff"}
                               </Button>
-                              <Button variant="ghost" size="sm" className="h-8 rounded-full px-3 text-slate-600 hover:bg-slate-50" onClick={() => setSelectedTaskId(task.id)}>
+                              <Button variant="ghost" size="sm" className="h-8 rounded-full px-3 text-slate-600 hover:bg-slate-50" onClick={() => handleOpenTask(task.id)}>
                                 {locale === "zh" ? "查看" : "Inspect"}
                               </Button>
                             </div>
@@ -1960,7 +1966,16 @@ export function OrchestraBoard() {
                       <div className="mt-3 space-y-2 text-sm text-slate-600">
                         {selectedTask.dependsOn.length ? selectedTask.dependsOn.map((dep) => {
                           const dependency = board.tasks.find((task) => task.id === dep);
-                          return <div key={dep}>{dependency ? translateTask(dependency, locale).title : dep}</div>;
+                          return dependency ? (
+                            <button
+                              key={dep}
+                              type="button"
+                              onClick={() => handleOpenTask(dep)}
+                              className="block text-left transition-colors hover:text-sky-700"
+                            >
+                              {translateTask(dependency, locale).title}
+                            </button>
+                          ) : <div key={dep}>{dep}</div>;
                         }) : <div>{locale === "zh" ? "无依赖" : "No dependencies"}</div>}
                       </div>
                     </div>
@@ -2191,7 +2206,7 @@ export function OrchestraBoard() {
                     <div key={task.id} className="rounded-2xl border border-slate-200 bg-[linear-gradient(180deg,_#ffffff_0%,_#fbfdff_100%)] p-4">
                       <button
                         type="button"
-                        onClick={() => setSelectedTaskId(task.id)}
+                        onClick={() => handleOpenTask(task.id)}
                         className="text-left text-sm font-medium text-slate-900 transition-colors hover:text-sky-700"
                       >
                         {translateTask(task, locale).title}
@@ -2202,7 +2217,7 @@ export function OrchestraBoard() {
                           <button
                             key={dependency.id}
                             type="button"
-                            onClick={() => setSelectedTaskId(dependency.id)}
+                            onClick={() => handleOpenTask(dependency.id)}
                             className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-600 transition-colors hover:border-slate-300 hover:text-slate-900"
                           >
                             {translateTask(dependency, locale).title}
@@ -2227,7 +2242,7 @@ export function OrchestraBoard() {
                     <div key={task.id} className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
                       <button
                         type="button"
-                        onClick={() => setSelectedTaskId(task.id)}
+                        onClick={() => handleOpenTask(task.id)}
                         className="text-left text-sm font-medium text-slate-900 transition-colors hover:text-sky-700"
                       >
                         {translateTask(task, locale).title}
@@ -2238,7 +2253,7 @@ export function OrchestraBoard() {
                           <button
                             key={dependent.id}
                             type="button"
-                            onClick={() => setSelectedTaskId(dependent.id)}
+                            onClick={() => handleOpenTask(dependent.id)}
                             className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-600 transition-colors hover:border-slate-300 hover:text-slate-900"
                           >
                             {translateTask(dependent, locale).title}
@@ -2745,7 +2760,7 @@ export function OrchestraBoard() {
                             <button
                               key={taskId}
                               type="button"
-                              onClick={() => task && setSelectedTaskId(task.id)}
+                              onClick={() => task && handleOpenTask(task.id)}
                               className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-600 transition-colors hover:border-slate-300 hover:text-slate-900"
                             >
                               {task ? translateTask(task, locale).title : taskId}
@@ -2800,7 +2815,7 @@ export function OrchestraBoard() {
                       variant="ghost"
                       size="sm"
                       className="rounded-full border border-transparent hover:border-slate-200 hover:bg-slate-50"
-                      onClick={() => setSelectedTaskId(record.taskId)}
+                      onClick={() => handleOpenTask(record.taskId)}
                     >
                       {locale === "zh" ? "定位任务" : "Open Task"}
                     </Button>
