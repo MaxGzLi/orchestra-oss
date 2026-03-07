@@ -1196,6 +1196,74 @@ export function OrchestraBoard() {
       recentlyActiveBoards,
     };
   }, [boardSnapshots, sortedBoardSnapshots]);
+  const portfolioActionPlan = useMemo(() => {
+    const priorityScore: Record<OrchestraTaskPriority, number> = {
+      low: 1,
+      medium: 2,
+      high: 3,
+      critical: 5,
+    };
+    const nextBoards = boardSnapshots
+      .map((snapshot) => {
+        const tasks = snapshot.board.tasks;
+        const blocked = tasks.filter((task) => task.state === "blocked").length;
+        const criticalOpen = tasks.filter((task) => task.priority === "critical" && task.state !== "done").length;
+        const runnable = tasks.filter((task) =>
+          task.state === "ready" &&
+          task.dependsOn.every((dependencyId) => tasks.find((candidate) => candidate.id === dependencyId)?.state === "done"),
+        ).length;
+        return {
+          id: snapshot.id,
+          name: snapshot.name,
+          score: criticalOpen * 5 + blocked * 3 + runnable,
+          blocked,
+          runnable,
+          criticalOpen,
+        };
+      })
+      .sort((left, right) => right.score - left.score)
+      .slice(0, 3);
+
+    const executorLoad = (["commander", "planner", "codex", "claude_code", "portfolio", "human"] as OrchestraExecutor[])
+      .map((executor) => {
+        const active = boardSnapshots.reduce((sum, snapshot) => (
+          sum + snapshot.board.tasks.filter((task) =>
+            task.owner === executor &&
+            ["ready", "in_progress", "review", "blocked"].includes(task.state),
+          ).length
+        ), 0);
+        const blocked = boardSnapshots.reduce((sum, snapshot) => (
+          sum + snapshot.board.tasks.filter((task) => task.owner === executor && task.state === "blocked").length
+        ), 0);
+        return { executor, active, blocked };
+      })
+      .filter((entry) => entry.active > 0)
+      .sort((left, right) => right.active - left.active);
+
+    const suggestedBatch = boardSnapshots
+      .flatMap((snapshot) => snapshot.board.tasks
+        .filter((task) =>
+          task.state === "ready" &&
+          task.dependsOn.every((dependencyId) => snapshot.board.tasks.find((candidate) => candidate.id === dependencyId)?.state === "done"),
+        )
+        .map((task) => ({
+          boardId: snapshot.id,
+          boardName: snapshot.name,
+          taskId: task.id,
+          title: task.title,
+          owner: task.owner,
+          priority: task.priority,
+          score: priorityScore[task.priority] + (task.lane === "execution" ? 2 : 0),
+        })))
+      .sort((left, right) => right.score - left.score)
+      .slice(0, 5);
+
+    return {
+      nextBoards,
+      executorLoad,
+      suggestedBatch,
+    };
+  }, [boardSnapshots]);
 
   useEffect(() => {
     window.localStorage.setItem(LOCALE_KEY, locale);
@@ -1359,6 +1427,18 @@ export function OrchestraBoard() {
     }
 
     hydrateFromSnapshot(snapshot);
+  }
+
+  function handleOpenPortfolioTask(snapshotId: string, taskId: string) {
+    const snapshot = boardSnapshots.find((candidate) => candidate.id === snapshotId);
+    if (!snapshot) {
+      return;
+    }
+
+    hydrateFromSnapshot({
+      ...snapshot,
+      selectedTaskId: taskId,
+    });
   }
 
   function handleCreateBoardSnapshot() {
@@ -1967,6 +2047,95 @@ export function OrchestraBoard() {
                     </div>
                   </button>
                 ))}
+              </div>
+            </div>
+
+            <div className="grid gap-3 xl:grid-cols-3">
+              <div className="rounded-[20px] border border-slate-200/80 bg-slate-50/80 p-3">
+                <div className="text-xs uppercase tracking-[0.18em] text-slate-500">
+                  {locale === "zh" ? "建议先推进" : "Recommended Next Boards"}
+                </div>
+                <div className="mt-3 space-y-2">
+                  {portfolioActionPlan.nextBoards.map((snapshot) => (
+                    <button
+                      key={snapshot.id}
+                      type="button"
+                      onClick={() => handleSwitchBoardSnapshot(snapshot.id)}
+                      className="w-full rounded-2xl border border-slate-200 bg-white/90 px-3 py-3 text-left transition-colors hover:border-slate-300"
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="truncate text-sm font-semibold text-slate-950">{snapshot.name}</div>
+                        <Badge variant="outline" className="rounded-full border-slate-300 text-slate-600">
+                          {snapshot.score}
+                        </Badge>
+                      </div>
+                      <div className="mt-2 flex flex-wrap gap-1 text-xs">
+                        <Badge variant="outline" className="rounded-full border-emerald-200 text-emerald-700">
+                          {locale === "zh" ? `Ready ${snapshot.runnable}` : `Ready ${snapshot.runnable}`}
+                        </Badge>
+                        <Badge variant="outline" className="rounded-full border-rose-200 text-rose-700">
+                          {locale === "zh" ? `阻塞 ${snapshot.blocked}` : `Blocked ${snapshot.blocked}`}
+                        </Badge>
+                        <Badge variant="outline" className="rounded-full border-amber-200 text-amber-700">
+                          {locale === "zh" ? `关键 ${snapshot.criticalOpen}` : `Critical ${snapshot.criticalOpen}`}
+                        </Badge>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="rounded-[20px] border border-slate-200/80 bg-slate-50/80 p-3">
+                <div className="text-xs uppercase tracking-[0.18em] text-slate-500">
+                  {locale === "zh" ? "执行者负载" : "Executor Load"}
+                </div>
+                <div className="mt-3 space-y-2">
+                  {portfolioActionPlan.executorLoad.map((entry) => (
+                    <div
+                      key={entry.executor}
+                      className="rounded-2xl border border-slate-200 bg-white/90 px-3 py-3"
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <Badge className={cn("rounded-full", ownerTone[entry.executor])}>
+                          {entry.executor}
+                        </Badge>
+                        <span className="text-xs text-slate-500">
+                          {locale === "zh" ? `${entry.active} 个活跃任务` : `${entry.active} active tasks`}
+                        </span>
+                      </div>
+                      <div className="mt-2 text-xs text-slate-500">
+                        {entry.blocked > 0
+                          ? (locale === "zh" ? `${entry.blocked} 个阻塞任务需要卸载或协助。` : `${entry.blocked} blocked tasks need relief or support.`)
+                          : (locale === "zh" ? "当前没有阻塞任务，负载可控。" : "No blocked tasks right now; load is manageable.")}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="rounded-[20px] border border-slate-200/80 bg-slate-50/80 p-3">
+                <div className="text-xs uppercase tracking-[0.18em] text-slate-500">
+                  {locale === "zh" ? "推荐下一批执行" : "Suggested Cross-Board Batch"}
+                </div>
+                <div className="mt-3 space-y-2">
+                  {portfolioActionPlan.suggestedBatch.map((task) => (
+                    <button
+                      key={`${task.boardId}-${task.taskId}`}
+                      type="button"
+                      onClick={() => handleOpenPortfolioTask(task.boardId, task.taskId)}
+                      className="w-full rounded-2xl border border-slate-200 bg-white/90 px-3 py-3 text-left transition-colors hover:border-slate-300"
+                    >
+                      <div className="truncate text-sm font-semibold text-slate-950">{task.title}</div>
+                      <div className="mt-1 text-xs text-slate-500">{task.boardName}</div>
+                      <div className="mt-2 flex flex-wrap gap-1 text-xs">
+                        <Badge className={cn("rounded-full", ownerTone[task.owner])}>{task.owner}</Badge>
+                        <Badge variant="outline" className={cn("rounded-full", priorityTone[task.priority])}>
+                          {locale === "zh" ? `优先级 ${priorityLabel[locale][task.priority]}` : `Priority ${priorityLabel[locale][task.priority]}`}
+                        </Badge>
+                      </div>
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
 
