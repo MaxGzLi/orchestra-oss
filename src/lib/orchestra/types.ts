@@ -25,6 +25,13 @@ export type OrchestraExecutor =
 
 export type OrchestraTaskPriority = "low" | "medium" | "high" | "critical";
 
+export interface OrchestraTaskComment {
+  id: string;
+  author: OrchestraExecutor;
+  body: string;
+  createdAt: string;
+}
+
 export interface OrchestraFeatureIdea {
   id: string;
   title: string;
@@ -45,6 +52,7 @@ export interface OrchestraTask {
   dependsOn: string[];
   acceptance: string[];
   lane: "strategy" | "planning" | "execution" | "governance";
+  comments: OrchestraTaskComment[];
 }
 
 export interface AgentProfile {
@@ -81,7 +89,7 @@ export interface OrchestraTimelineEvent {
   id: string;
   taskId: string;
   runId?: string;
-  eventType: "queued" | "completed" | "failed" | "board_saved";
+  eventType: "queued" | "completed" | "failed" | "board_saved" | "comment_added";
   title: string;
   detail: string;
   createdAt: string;

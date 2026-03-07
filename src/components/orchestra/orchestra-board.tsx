@@ -30,6 +30,7 @@ import type {
   OrchestraBoard,
   OrchestraExecutor,
   OrchestraFeatureIdea,
+  OrchestraTaskComment,
   OrchestraTaskPriority,
   OrchestraRunRecord,
   OrchestraScenario,
@@ -359,6 +360,8 @@ function timelineLabel(type: OrchestraTimelineEvent["eventType"], locale: Locale
       return "失败";
     case "board_saved":
       return "看板已更新";
+    case "comment_added":
+      return "已添加评论";
   }
 }
 
@@ -513,6 +516,17 @@ function buildTimeline(taskId: string, runId: string, locale: Locale): Orchestra
   ];
 }
 
+function buildCommentTimeline(taskId: string, comment: OrchestraTaskComment, locale: Locale): OrchestraTimelineEvent {
+  return {
+    id: `${taskId}-${comment.id}`,
+    taskId,
+    eventType: "comment_added",
+    title: locale === "zh" ? "新增评论" : "Comment added",
+    detail: `${ownerLabel(comment.author, locale)}: ${comment.body}`,
+    createdAt: comment.createdAt,
+  };
+}
+
 function updateTaskState(task: OrchestraTask): OrchestraTask {
   if (task.kind === "implementation") {
     return { ...task, state: "review" };
@@ -570,6 +584,58 @@ function parseAcceptance(value: string): string[] {
     .filter(Boolean);
 }
 
+function normalizeBoard(board: OrchestraBoard): OrchestraBoard {
+  return {
+    ...board,
+    tasks: board.tasks.map((task) => ({
+      ...task,
+      comments: task.comments ?? [],
+    })),
+  };
+}
+
+function isTaskRunnable(task: OrchestraTask, board: OrchestraBoard, batchTaskIds: Set<string>, completedInBatch: Set<string>) {
+  if (task.state !== "ready") {
+    return {
+      runnable: false,
+      reason: `Task is currently ${task.state}.`,
+    };
+  }
+
+  for (const dependencyId of task.dependsOn) {
+    if (completedInBatch.has(dependencyId)) {
+      continue;
+    }
+
+    const dependency = board.tasks.find((candidate) => candidate.id === dependencyId);
+    if (!dependency) {
+      return {
+        runnable: false,
+        reason: `Dependency ${dependencyId} is missing from the board.`,
+      };
+    }
+
+    if (batchTaskIds.has(dependencyId)) {
+      return {
+        runnable: false,
+        reason: `Dependency ${dependency.title} has not completed yet in this batch.`,
+      };
+    }
+
+    if (!["done", "review"].includes(dependency.state)) {
+      return {
+        runnable: false,
+        reason: `Dependency ${dependency.title} is still ${dependency.state}.`,
+      };
+    }
+  }
+
+  return {
+    runnable: true,
+    reason: "",
+  };
+}
+
 export function OrchestraBoard() {
   const defaultBoard = getDefaultOrchestraBoard();
   const [locale, setLocale] = useState<Locale>(getInitialLocale);
@@ -590,6 +656,8 @@ export function OrchestraBoard() {
   const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
   const [dragOverLane, setDragOverLane] = useState<OrchestraTask["lane"] | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+  const [newCommentBody, setNewCommentBody] = useState("");
+  const [newCommentAuthor, setNewCommentAuthor] = useState<OrchestraExecutor>("human");
   const [newTaskTitle, setNewTaskTitle] = useState("");
   const [newTaskSummary, setNewTaskSummary] = useState("");
   const [newTaskLane, setNewTaskLane] = useState<OrchestraTask["lane"]>("execution");
@@ -641,16 +709,17 @@ export function OrchestraBoard() {
           batchStrategy?: BatchStrategy;
         };
 
-        setBoard(parsed.board);
-        setSelectedTaskId(parsed.selectedTaskId || parsed.board.tasks[0]?.id || "");
+        const normalizedBoard = normalizeBoard(parsed.board);
+        setBoard(normalizedBoard);
+        setSelectedTaskId(parsed.selectedTaskId || normalizedBoard.tasks[0]?.id || "");
         setRunHistory(parsed.runHistory ?? []);
         setTimeline(parsed.timeline ?? []);
         setSelectedCommandTaskIds(parsed.selectedCommandTaskIds ?? []);
         setBatchStrategy(parsed.batchStrategy ?? "manual");
-        setTitle(parsed.board.feature.title);
-        setProblem(parsed.board.feature.problem);
-        setGoals(parsed.board.feature.goals.join("\n"));
-        setConstraints(parsed.board.feature.constraints.join("\n"));
+        setTitle(normalizedBoard.feature.title);
+        setProblem(normalizedBoard.feature.problem);
+        setGoals(normalizedBoard.feature.goals.join("\n"));
+        setConstraints(normalizedBoard.feature.constraints.join("\n"));
       } catch {
         // Ignore invalid local state.
       }
@@ -756,25 +825,102 @@ export function OrchestraBoard() {
       return;
     }
 
-    const results = orderedCommandTasks.map((task, index) => ({
-      task,
-      packet: commandPackets[index],
-      result: buildDemoResult(commandPackets[index]),
-    }));
-    if (!results.length) {
+    const completedInBatch = new Set<string>();
+    const batchTaskIds = new Set(orderedCommandTasks.map((task) => task.id));
+    const executionLog: Array<{
+      task: OrchestraTask;
+      result: DemoResult;
+      status: OrchestraRunRecord["status"];
+      shouldAdvance: boolean;
+    }> = [];
+
+    for (const [index, task] of orderedCommandTasks.entries()) {
+      const packet = commandPackets[index];
+      const gate = isTaskRunnable(task, board, batchTaskIds, completedInBatch);
+
+      if (!gate.runnable) {
+        executionLog.push({
+          task,
+          status: "failed",
+          shouldAdvance: false,
+          result: {
+            executor: packet.executor,
+            mode: "dry_run",
+            command: packet.suggestedCommand,
+            stdout: `Skipped ${task.title}.`,
+            stderr: gate.reason,
+            durationMs: 0,
+          },
+        });
+        continue;
+      }
+
+      const result = buildDemoResult(packet);
+      executionLog.push({
+        task,
+        result,
+        status: "succeeded",
+        shouldAdvance: true,
+      });
+      completedInBatch.add(task.id);
+    }
+
+    if (!executionLog.length) {
       return;
     }
 
-    const records = results.map(({ task, result }) => buildRunRecord(task.id, result));
-    const nextTimeline = results.flatMap(({ task }, index) => buildTimeline(task.id, records[index].id, locale));
+    const records = executionLog.map(({ task, result, status }) => ({
+      ...buildRunRecord(task.id, result),
+      status,
+    }));
+    const nextTimeline = executionLog.flatMap(({ task, result }, index) => {
+      const runId = records[index].id;
+      if (records[index].status === "failed") {
+        return [
+          {
+            id: `${runId}-failed`,
+            taskId: task.id,
+            runId,
+            eventType: "failed" as const,
+            title: locale === "zh" ? "任务已跳过" : "Task skipped",
+            detail: locale === "zh" ? `未执行。原因：${result.stderr}` : `Not executed. Reason: ${result.stderr}`,
+            createdAt: records[index].createdAt,
+          },
+        ];
+      }
+      return buildTimeline(task.id, runId, locale);
+    });
 
-    setRunResult(results[results.length - 1]?.result ?? null);
+    setRunResult({
+      executor: executionLog[executionLog.length - 1]?.result.executor ?? "commander",
+      mode: "dry_run",
+      command: commandPackets.length > 1 ? buildBatchCommand(commandPackets) : commandPackets[0]?.suggestedCommand ?? "",
+      stdout: [
+        locale === "zh" ? `批次总任务数：${executionLog.length}` : `Batch tasks: ${executionLog.length}`,
+        locale === "zh"
+          ? `成功执行：${executionLog.filter((item) => item.status === "succeeded").length}`
+          : `Executed: ${executionLog.filter((item) => item.status === "succeeded").length}`,
+        locale === "zh"
+          ? `已跳过：${executionLog.filter((item) => item.status === "failed").length}`
+          : `Skipped: ${executionLog.filter((item) => item.status === "failed").length}`,
+      ].join("\n"),
+      stderr:
+        executionLog
+          .filter((item) => item.status === "failed")
+          .map((item) => `${item.task.title}: ${item.result.stderr}`)
+          .join("\n") || (locale === "zh" ? "无" : "None"),
+      durationMs: executionLog.reduce((sum, item) => sum + item.result.durationMs, 0),
+    });
     setRunHistory((current) => [...records.reverse(), ...current].slice(0, 20));
     setTimeline((current) => [...nextTimeline.reverse(), ...current].slice(0, 80));
     setBoard((current) => ({
       ...current,
       tasks: current.tasks.map((task) => (
-        selectedCommandTaskIds.includes(task.id) ? updateTaskState(task) : task
+        executionLog.find((item) => item.task.id === task.id)?.shouldAdvance
+          ? updateTaskState(task)
+          : executionLog.find((item) => item.task.id === task.id)?.status === "failed" && task.state === "ready"
+            ? { ...task, state: "blocked" }
+            : task
       )),
     }));
   }
@@ -833,6 +979,7 @@ export function OrchestraBoard() {
       dependsOn: selectedTask ? [selectedTask.id] : [],
       acceptance: [locale === "zh" ? "补充验收标准" : "Add acceptance criteria"],
       lane: newTaskLane,
+      comments: [],
     };
 
     setBoard((current) => ({ ...current, tasks: [...current.tasks, task] }));
@@ -876,6 +1023,30 @@ export function OrchestraBoard() {
     setSelectedCommandTaskIds((current) => (
       checked ? [...new Set([...current, taskId])] : current.filter((id) => id !== taskId)
     ));
+  }
+
+  function handleAddComment() {
+    if (!selectedTask) {
+      return;
+    }
+
+    const body = newCommentBody.trim();
+    if (!body) {
+      return;
+    }
+
+    const comment: OrchestraTaskComment = {
+      id: `comment-${Date.now()}`,
+      author: newCommentAuthor,
+      body,
+      createdAt: new Date().toISOString(),
+    };
+
+    setBoard((current) => updateTask(current, selectedTask.id, {
+      comments: [...selectedTask.comments, comment],
+    }));
+    setTimeline((current) => [buildCommentTimeline(selectedTask.id, comment, locale), ...current].slice(0, 80));
+    setNewCommentBody("");
   }
 
   function handleTaskDrop(targetLane: OrchestraTask["lane"], targetIndex?: number) {
@@ -1445,6 +1616,61 @@ export function OrchestraBoard() {
                       <div className="mt-3 space-y-2 text-sm text-slate-600">
                         {translateTask(selectedTask, locale).acceptance.map((criterion) => <div key={criterion}>{criterion}</div>)}
                       </div>
+                    </div>
+                  </div>
+
+                  <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="text-xs uppercase tracking-[0.18em] text-slate-500">
+                        {locale === "zh" ? "任务评论" : "Task Comments"}
+                      </div>
+                      <Badge variant="outline" className="rounded-full border-slate-300 text-slate-600">
+                        {selectedTask.comments.length} {locale === "zh" ? "条" : "comments"}
+                      </Badge>
+                    </div>
+                    <div className="mt-4 grid gap-3">
+                      <div className="grid gap-3 md:grid-cols-[180px_1fr_auto]">
+                        <select
+                          value={newCommentAuthor}
+                          onChange={(event) => setNewCommentAuthor(event.target.value as OrchestraExecutor)}
+                          className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm outline-none focus:border-slate-300"
+                        >
+                          {(["planner", "commander", "codex", "claude_code", "portfolio", "human"] as OrchestraExecutor[]).map((owner) => (
+                            <option key={owner} value={owner}>
+                              {ownerLabel(owner, locale)}
+                            </option>
+                          ))}
+                        </select>
+                        <Textarea
+                          value={newCommentBody}
+                          onChange={(event) => setNewCommentBody(event.target.value)}
+                          className="min-h-20"
+                          placeholder={locale === "zh" ? "写一条关于当前任务的评论、决定或提醒。" : "Write a comment, decision, or reminder for this task."}
+                        />
+                        <Button onClick={handleAddComment} className="rounded-full bg-slate-950 px-5 text-white shadow-sm hover:bg-slate-800">
+                          {locale === "zh" ? "添加评论" : "Add Comment"}
+                        </Button>
+                      </div>
+                      {selectedTask.comments.length ? (
+                        <div className="space-y-3">
+                          {selectedTask.comments
+                            .slice()
+                            .reverse()
+                            .map((comment) => (
+                              <div key={comment.id} className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
+                                <div className="flex items-center justify-between gap-3">
+                                  <div className="text-sm font-medium text-slate-900">{ownerLabel(comment.author, locale)}</div>
+                                  <div className="text-xs text-slate-500">{new Date(comment.createdAt).toLocaleString()}</div>
+                                </div>
+                                <p className="mt-2 text-sm leading-6 text-slate-600">{comment.body}</p>
+                              </div>
+                            ))}
+                        </div>
+                      ) : (
+                        <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-600">
+                          {locale === "zh" ? "这个任务还没有评论。" : "No comments on this task yet."}
+                        </div>
+                      )}
                     </div>
                   </div>
 

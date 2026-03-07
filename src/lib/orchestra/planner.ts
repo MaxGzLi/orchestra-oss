@@ -47,6 +47,7 @@ export function buildBoardFromIdea(idea: OrchestraFeatureIdea): OrchestraBoard {
         "Constraints are documented",
       ],
       lane: "strategy",
+      comments: [],
     },
     {
       id: `${baseId}-plan`,
@@ -63,6 +64,7 @@ export function buildBoardFromIdea(idea: OrchestraFeatureIdea): OrchestraBoard {
         "Parallel work is separated from serial work",
       ],
       lane: "planning",
+      comments: [],
     },
     {
       id: `${baseId}-codex`,
@@ -78,6 +80,7 @@ export function buildBoardFromIdea(idea: OrchestraFeatureIdea): OrchestraBoard {
         "Tests or verification steps are attached",
       ],
       lane: "execution",
+      comments: [],
     },
     {
       id: `${baseId}-claude`,
@@ -93,6 +96,7 @@ export function buildBoardFromIdea(idea: OrchestraFeatureIdea): OrchestraBoard {
         "Architecture risks are called out",
       ],
       lane: "execution",
+      comments: [],
     },
     {
       id: `${baseId}-portfolio`,
@@ -108,6 +112,7 @@ export function buildBoardFromIdea(idea: OrchestraFeatureIdea): OrchestraBoard {
         "Follow-on opportunities are captured",
       ],
       lane: "governance",
+      comments: [],
     },
   ];
 

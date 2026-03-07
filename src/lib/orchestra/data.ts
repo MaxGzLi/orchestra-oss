@@ -81,6 +81,7 @@ const defaultTasks: OrchestraTask[] = [
     dependsOn: [],
     acceptance: ["Goals and constraints are explicit", "Downstream agents can plan without guessing"],
     lane: "strategy",
+    comments: [],
   },
   {
     id: "plan-graph",
@@ -93,6 +94,7 @@ const defaultTasks: OrchestraTask[] = [
     dependsOn: ["brief-clarify"],
     acceptance: ["Tasks are sequenced", "Each task has a clear executor"],
     lane: "planning",
+    comments: [],
   },
   {
     id: "exec-board-ui",
@@ -105,6 +107,7 @@ const defaultTasks: OrchestraTask[] = [
     dependsOn: ["plan-graph"],
     acceptance: ["Board view renders lanes", "Agent roster is visible", "Planning input is editable"],
     lane: "execution",
+    comments: [],
   },
   {
     id: "exec-command-protocol",
@@ -117,6 +120,7 @@ const defaultTasks: OrchestraTask[] = [
     dependsOn: ["plan-graph"],
     acceptance: ["Executor choice is explicit", "Review path is defined", "Ambiguous tasks escalate correctly"],
     lane: "execution",
+    comments: [],
   },
   {
     id: "review-governance",
@@ -129,6 +133,7 @@ const defaultTasks: OrchestraTask[] = [
     dependsOn: ["exec-board-ui", "exec-command-protocol"],
     acceptance: ["Risks are surfaced", "Business opportunities are documented"],
     lane: "governance",
+    comments: [],
   },
 ];
 
