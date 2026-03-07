@@ -23,6 +23,8 @@ export type OrchestraExecutor =
   | "portfolio"
   | "human";
 
+export type OrchestraTaskPriority = "low" | "medium" | "high" | "critical";
+
 export interface OrchestraFeatureIdea {
   id: string;
   title: string;
@@ -38,6 +40,7 @@ export interface OrchestraTask {
   summary: string;
   state: OrchestraTaskState;
   kind: OrchestraTaskKind;
+  priority: OrchestraTaskPriority;
   owner: OrchestraExecutor;
   dependsOn: string[];
   acceptance: string[];

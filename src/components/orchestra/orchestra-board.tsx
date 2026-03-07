@@ -12,7 +12,9 @@ import {
   Flag,
   GitPullRequestArrow,
   Lightbulb,
+  Plus,
   Sparkles,
+  Trash2,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -27,6 +29,7 @@ import type {
   OrchestraBoard,
   OrchestraExecutor,
   OrchestraFeatureIdea,
+  OrchestraTaskPriority,
   OrchestraRunRecord,
   OrchestraScenario,
   OrchestraTask,
@@ -73,6 +76,21 @@ const statusLabel: Record<Locale, Record<OrchestraTaskState, string>> = {
   },
 };
 
+const priorityLabel: Record<Locale, Record<OrchestraTaskPriority, string>> = {
+  zh: {
+    low: "低",
+    medium: "中",
+    high: "高",
+    critical: "最高",
+  },
+  en: {
+    low: "low",
+    medium: "medium",
+    high: "high",
+    critical: "critical",
+  },
+};
+
 const stateTone: Record<OrchestraTaskState, string> = {
   intake: "bg-white/80 text-slate-700 border-slate-200",
   planning: "bg-amber-50 text-amber-700 border-amber-200",
@@ -90,6 +108,13 @@ const ownerTone: Record<OrchestraExecutor, string> = {
   claude_code: "bg-violet-600 text-white",
   portfolio: "bg-emerald-600 text-white",
   human: "bg-zinc-400 text-white",
+};
+
+const priorityTone: Record<OrchestraTaskPriority, string> = {
+  low: "border-slate-200 bg-slate-50 text-slate-600",
+  medium: "border-sky-200 bg-sky-50 text-sky-700",
+  high: "border-amber-200 bg-amber-50 text-amber-700",
+  critical: "border-rose-200 bg-rose-50 text-rose-700",
 };
 
 const laneOrder: Array<OrchestraTask["lane"]> = ["strategy", "planning", "execution", "governance"];
@@ -147,58 +172,7 @@ const protocolRows: Record<Locale, Array<{ route: string; when: string; why: str
 };
 
 function getInitialLocale(): Locale {
-  if (typeof window === "undefined") {
-    return "zh";
-  }
-
-  const stored = window.localStorage.getItem(LOCALE_KEY);
-  return stored === "en" ? "en" : "zh";
-}
-
-function getInitialSnapshot() {
-  if (typeof window === "undefined") {
-    const board = getDefaultOrchestraBoard();
-    return {
-      board,
-      selectedTaskId: board.tasks[0]?.id ?? "",
-      runHistory: [] as OrchestraRunRecord[],
-      timeline: [] as OrchestraTimelineEvent[],
-    };
-  }
-
-  const raw = window.localStorage.getItem(STATE_KEY);
-  if (!raw) {
-    const board = getDefaultOrchestraBoard();
-    return {
-      board,
-      selectedTaskId: board.tasks[0]?.id ?? "",
-      runHistory: [] as OrchestraRunRecord[],
-      timeline: [] as OrchestraTimelineEvent[],
-    };
-  }
-
-  try {
-    const parsed = JSON.parse(raw) as {
-      board: OrchestraBoard;
-      selectedTaskId: string;
-      runHistory: OrchestraRunRecord[];
-      timeline: OrchestraTimelineEvent[];
-    };
-    return {
-      board: parsed.board,
-      selectedTaskId: parsed.selectedTaskId,
-      runHistory: parsed.runHistory ?? [],
-      timeline: parsed.timeline ?? [],
-    };
-  } catch {
-    const board = getDefaultOrchestraBoard();
-    return {
-      board,
-      selectedTaskId: board.tasks[0]?.id ?? "",
-      runHistory: [] as OrchestraRunRecord[],
-      timeline: [] as OrchestraTimelineEvent[],
-    };
-  }
+  return "zh";
 }
 
 function ownerLabel(owner: OrchestraTask["owner"], locale: Locale): string {
@@ -261,35 +235,93 @@ function translateTask(task: OrchestraTask, locale: Locale) {
     return task;
   }
 
-  const dictionary: Record<string, { title: string; summary: string; acceptance: string[] }> = {
+  const dictionary: Record<
+    string,
+    {
+      source: { title: string; summary: string; acceptance: string[] };
+      target: { title: string; summary: string; acceptance: string[] };
+    }
+  > = {
     "brief-clarify": {
-      title: "澄清功能简报",
-      summary: "把原始功能请求整理成明确的目标、约束和上线意图。",
-      acceptance: ["目标和约束已明确", "下游 agent 无需猜测即可继续规划"],
+      source: {
+        title: "Clarify feature brief",
+        summary: "Turn the raw feature request into explicit goals, constraints, and rollout intent.",
+        acceptance: ["Goals and constraints are explicit", "Downstream agents can plan without guessing"],
+      },
+      target: {
+        title: "澄清功能简报",
+        summary: "把原始功能请求整理成明确的目标、约束和上线意图。",
+        acceptance: ["目标和约束已明确", "下游 agent 无需猜测即可继续规划"],
+      },
     },
     "plan-graph": {
-      title: "生成任务图",
-      summary: "把工作拆成规划、实现和评审切片，并明确依赖关系。",
-      acceptance: ["任务顺序清晰", "每个任务都有明确执行者"],
+      source: {
+        title: "Generate task graph",
+        summary: "Split work into planning, implementation, and review slices with dependency edges.",
+        acceptance: ["Tasks are sequenced", "Each task has a clear executor"],
+      },
+      target: {
+        title: "生成任务图",
+        summary: "把工作拆成规划、实现和评审切片，并明确依赖关系。",
+        acceptance: ["任务顺序清晰", "每个任务都有明确执行者"],
+      },
     },
     "exec-board-ui": {
-      title: "构建编排看板 UI",
-      summary: "创建用于展示 agents、进度和功能规划的看板界面。",
-      acceptance: ["看板视图已渲染", "Agent roster 可见", "规划输入可编辑"],
+      source: {
+        title: "Build orchestration board UI",
+        summary: "Create the board surface where agents, progress, and feature planning are visible.",
+        acceptance: ["Board view renders lanes", "Agent roster is visible", "Planning input is editable"],
+      },
+      target: {
+        title: "构建编排看板 UI",
+        summary: "创建用于展示 agents、进度和功能规划的看板界面。",
+        acceptance: ["看板视图已渲染", "Agent roster 可见", "规划输入可编辑"],
+      },
     },
     "exec-command-protocol": {
-      title: "定义 Commander 交接协议",
-      summary: "明确 Commander 如何把任务分派给 Codex 或 Claude Code。",
-      acceptance: ["执行者选择规则清晰", "评审路径已定义", "歧义任务会升级回 Commander"],
+      source: {
+        title: "Define Commander handoff protocol",
+        summary: "Specify how Commander routes concrete work to Codex versus Claude Code.",
+        acceptance: ["Executor choice is explicit", "Review path is defined", "Ambiguous tasks escalate correctly"],
+      },
+      target: {
+        title: "定义 Commander 交接协议",
+        summary: "明确 Commander 如何把任务分派给 Codex 或 Claude Code。",
+        acceptance: ["执行者选择规则清晰", "评审路径已定义", "歧义任务会升级回 Commander"],
+      },
     },
     "review-governance": {
-      title: "进行 Portfolio Review",
-      summary: "从产品和商业角度评估这个 board 是否真正提升了决策效率。",
-      acceptance: ["风险已暴露", "商业机会已记录"],
+      source: {
+        title: "Run portfolio review",
+        summary: "Assess whether the board helps with product prioritization and commercial decision-making.",
+        acceptance: ["Risks are surfaced", "Business opportunities are documented"],
+      },
+      target: {
+        title: "进行 Portfolio Review",
+        summary: "从产品和商业角度评估这个 board 是否真正提升了决策效率。",
+        acceptance: ["风险已暴露", "商业机会已记录"],
+      },
     },
   };
 
-  return dictionary[task.id] ?? {
+  const translated = dictionary[task.id];
+  if (!translated) {
+    return {
+      title: task.title,
+      summary: task.summary,
+      acceptance: task.acceptance,
+    };
+  }
+
+  const matchesSource =
+    task.title === translated.source.title &&
+    task.summary === translated.source.summary &&
+    task.acceptance.length === translated.source.acceptance.length &&
+    task.acceptance.every((criterion, index) => criterion === translated.source.acceptance[index]);
+
+  return matchesSource
+    ? translated.target
+    : {
     title: task.title,
     summary: task.summary,
     acceptance: task.acceptance,
@@ -375,21 +407,44 @@ function updateTaskState(task: OrchestraTask): OrchestraTask {
   return { ...task, state: "done" };
 }
 
+function updateTask(board: OrchestraBoard, taskId: string, updates: Partial<OrchestraTask>): OrchestraBoard {
+  return {
+    ...board,
+    tasks: board.tasks.map((task) => (task.id === taskId ? { ...task, ...updates } : task)),
+  };
+}
+
+function createTaskId(title: string): string {
+  return `task-${title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 24) || Date.now()}`;
+}
+
+function parseAcceptance(value: string): string[] {
+  return value
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+}
+
 export function OrchestraBoard() {
-  const initialSnapshot = getInitialSnapshot();
+  const defaultBoard = getDefaultOrchestraBoard();
   const [locale, setLocale] = useState<Locale>(getInitialLocale);
-  const [board, setBoard] = useState<OrchestraBoard>(initialSnapshot.board);
+  const [board, setBoard] = useState<OrchestraBoard>(defaultBoard);
   const [title, setTitle] = useState(board.feature.title);
   const [problem, setProblem] = useState(board.feature.problem);
   const [goals, setGoals] = useState(board.feature.goals.join("\n"));
   const [constraints, setConstraints] = useState(board.feature.constraints.join("\n"));
-  const [selectedTaskId, setSelectedTaskId] = useState(initialSnapshot.selectedTaskId);
+  const [selectedTaskId, setSelectedTaskId] = useState(defaultBoard.tasks[0]?.id ?? "");
   const [packet, setPacket] = useState<CommandPacket | null>(null);
   const [runResult, setRunResult] = useState<DemoResult | null>(null);
-  const [runHistory, setRunHistory] = useState<OrchestraRunRecord[]>(initialSnapshot.runHistory);
-  const [timeline, setTimeline] = useState<OrchestraTimelineEvent[]>(initialSnapshot.timeline);
+  const [runHistory, setRunHistory] = useState<OrchestraRunRecord[]>([]);
+  const [timeline, setTimeline] = useState<OrchestraTimelineEvent[]>([]);
   const [expandedRunId, setExpandedRunId] = useState<string | null>(null);
   const [selectedScenarioId, setSelectedScenarioId] = useState<string>(orchestraScenarios[0]?.id ?? "");
+  const [newTaskTitle, setNewTaskTitle] = useState("");
+  const [newTaskSummary, setNewTaskSummary] = useState("");
+  const [newTaskLane, setNewTaskLane] = useState<OrchestraTask["lane"]>("execution");
+  const [newTaskOwner, setNewTaskOwner] = useState<OrchestraExecutor>("codex");
+  const [newTaskPriority, setNewTaskPriority] = useState<OrchestraTaskPriority>("medium");
 
   const taskCounts = useMemo(() => summarizeByOwner(board.tasks), [board.tasks]);
   const laneMap = useMemo(
@@ -401,6 +456,42 @@ export function OrchestraBoard() {
     [board.tasks, selectedTaskId],
   );
   const selectedTimeline = timeline.filter((event) => event.taskId === selectedTaskId);
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      const storedLocale = window.localStorage.getItem(LOCALE_KEY);
+      if (storedLocale === "zh" || storedLocale === "en") {
+        setLocale(storedLocale);
+      }
+
+      const raw = window.localStorage.getItem(STATE_KEY);
+      if (!raw) {
+        return;
+      }
+
+      try {
+        const parsed = JSON.parse(raw) as {
+          board: OrchestraBoard;
+          selectedTaskId: string;
+          runHistory: OrchestraRunRecord[];
+          timeline: OrchestraTimelineEvent[];
+        };
+
+        setBoard(parsed.board);
+        setSelectedTaskId(parsed.selectedTaskId || parsed.board.tasks[0]?.id || "");
+        setRunHistory(parsed.runHistory ?? []);
+        setTimeline(parsed.timeline ?? []);
+        setTitle(parsed.board.feature.title);
+        setProblem(parsed.board.feature.problem);
+        setGoals(parsed.board.feature.goals.join("\n"));
+        setConstraints(parsed.board.feature.constraints.join("\n"));
+      } catch {
+        // Ignore invalid local state.
+      }
+    }, 0);
+
+    return () => window.clearTimeout(timeoutId);
+  }, []);
   const selectedScenario = orchestraScenarios.find((scenario) => scenario.id === selectedScenarioId) ?? orchestraScenarios[0];
 
   useEffect(() => {
@@ -495,6 +586,93 @@ export function OrchestraBoard() {
 
   async function handleCopy(text: string) {
     await navigator.clipboard.writeText(text);
+  }
+
+  function handleTaskFieldChange<K extends "state" | "owner" | "priority">(
+    field: K,
+    value: OrchestraTask[K],
+  ) {
+    if (!selectedTask) {
+      return;
+    }
+
+    setBoard((current) => updateTask(current, selectedTask.id, { [field]: value } as Partial<OrchestraTask>));
+  }
+
+  function handleTaskContentChange(updates: Partial<Pick<OrchestraTask, "title" | "summary" | "acceptance">>) {
+    if (!selectedTask) {
+      return;
+    }
+
+    setBoard((current) => updateTask(current, selectedTask.id, updates));
+  }
+
+  function handleDependencyToggle(dependencyId: string) {
+    if (!selectedTask || dependencyId === selectedTask.id) {
+      return;
+    }
+
+    const nextDependsOn = selectedTask.dependsOn.includes(dependencyId)
+      ? selectedTask.dependsOn.filter((id) => id !== dependencyId)
+      : [...selectedTask.dependsOn, dependencyId];
+
+    setBoard((current) => updateTask(current, selectedTask.id, { dependsOn: nextDependsOn }));
+  }
+
+  function handleCreateTask() {
+    const title = newTaskTitle.trim();
+    const summary = newTaskSummary.trim();
+
+    if (!title || !summary) {
+      return;
+    }
+
+    const task: OrchestraTask = {
+      id: createTaskId(title),
+      title,
+      summary,
+      state: "ready",
+      kind: newTaskLane === "planning" ? "spec" : newTaskLane === "governance" ? "review" : "implementation",
+      priority: newTaskPriority,
+      owner: newTaskOwner,
+      dependsOn: selectedTask ? [selectedTask.id] : [],
+      acceptance: [locale === "zh" ? "补充验收标准" : "Add acceptance criteria"],
+      lane: newTaskLane,
+    };
+
+    setBoard((current) => ({ ...current, tasks: [...current.tasks, task] }));
+    setSelectedTaskId(task.id);
+    setPacket(null);
+    setRunResult(null);
+    setNewTaskTitle("");
+    setNewTaskSummary("");
+    setNewTaskLane("execution");
+    setNewTaskOwner("codex");
+    setNewTaskPriority("medium");
+  }
+
+  function handleDeleteTask() {
+    if (!selectedTask) {
+      return;
+    }
+
+    const nextSelectedId = board.tasks.find((task) => task.id !== selectedTask.id)?.id ?? "";
+
+    setBoard((current) => ({
+      ...current,
+      tasks: current.tasks
+        .filter((task) => task.id !== selectedTask.id)
+        .map((task) => ({
+          ...task,
+          dependsOn: task.dependsOn.filter((id) => id !== selectedTask.id),
+        })),
+    }));
+    setTimeline((current) => current.filter((event) => event.taskId !== selectedTask.id));
+    setRunHistory((current) => current.filter((run) => run.taskId !== selectedTask.id));
+    setSelectedTaskId(nextSelectedId);
+    setPacket(null);
+    setRunResult(null);
+    setExpandedRunId(null);
   }
 
   return (
@@ -746,6 +924,9 @@ export function OrchestraBoard() {
                           <Badge variant="outline" className="rounded-full border-slate-300 text-slate-600">
                             {kindLabel(task.kind, locale)}
                           </Badge>
+                          <Badge className={cn("rounded-full border", priorityTone[task.priority])}>
+                            {locale === "zh" ? "优先级" : "Priority"}: {priorityLabel[locale][task.priority]}
+                          </Badge>
                           {task.dependsOn.length > 0 ? (
                             <Badge variant="outline" className="rounded-full border-slate-300 text-slate-600">
                               {locale === "zh" ? `依赖 ${task.dependsOn.length} 项` : `depends on ${task.dependsOn.length}`}
@@ -805,6 +986,125 @@ export function OrchestraBoard() {
                       <Badge className={cn("rounded-full", ownerTone[selectedTask.owner])}>{ownerLabel(selectedTask.owner, locale)}</Badge>
                       <Badge variant="outline" className="rounded-full border-slate-300 text-slate-600">{kindLabel(selectedTask.kind, locale)}</Badge>
                       <Badge variant="outline" className="rounded-full border-slate-300 text-slate-600">{laneLabels[locale][selectedTask.lane]}</Badge>
+                      <Badge className={cn("rounded-full border", priorityTone[selectedTask.priority])}>
+                        {locale === "zh" ? "优先级" : "Priority"}: {priorityLabel[locale][selectedTask.priority]}
+                      </Badge>
+                    </div>
+                  </div>
+
+                  <div className="grid gap-3">
+                    <label className="grid gap-2 text-sm">
+                      <span className="font-medium text-slate-700">{locale === "zh" ? "任务标题" : "Task Title"}</span>
+                      <Input
+                        value={selectedTask.title}
+                        onChange={(event) => handleTaskContentChange({ title: event.target.value })}
+                      />
+                    </label>
+                    <label className="grid gap-2 text-sm">
+                      <span className="font-medium text-slate-700">{locale === "zh" ? "任务摘要" : "Task Summary"}</span>
+                      <Textarea
+                        value={selectedTask.summary}
+                        onChange={(event) => handleTaskContentChange({ summary: event.target.value })}
+                        className="min-h-24"
+                      />
+                    </label>
+                  </div>
+
+                  <div className="grid gap-3 lg:grid-cols-3">
+                    <label className="grid gap-2 text-sm">
+                      <span className="font-medium text-slate-700">{locale === "zh" ? "任务状态" : "Task State"}</span>
+                      <select
+                        value={selectedTask.state}
+                        onChange={(event) => handleTaskFieldChange("state", event.target.value as OrchestraTaskState)}
+                        className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm outline-none focus:border-slate-300"
+                      >
+                        {(Object.keys(statusLabel.en) as OrchestraTaskState[]).map((state) => (
+                          <option key={state} value={state}>
+                            {statusLabel[locale][state]}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="grid gap-2 text-sm">
+                      <span className="font-medium text-slate-700">{locale === "zh" ? "执行归属" : "Owner"}</span>
+                      <select
+                        value={selectedTask.owner}
+                        onChange={(event) => handleTaskFieldChange("owner", event.target.value as OrchestraExecutor)}
+                        className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm outline-none focus:border-slate-300"
+                      >
+                        {(["planner", "commander", "codex", "claude_code", "portfolio", "human"] as OrchestraExecutor[]).map((owner) => (
+                          <option key={owner} value={owner}>
+                            {ownerLabel(owner, locale)}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="grid gap-2 text-sm">
+                      <span className="font-medium text-slate-700">{locale === "zh" ? "任务优先级" : "Priority"}</span>
+                      <select
+                        value={selectedTask.priority}
+                        onChange={(event) => handleTaskFieldChange("priority", event.target.value as OrchestraTaskPriority)}
+                        className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm outline-none focus:border-slate-300"
+                      >
+                        {(["low", "medium", "high", "critical"] as OrchestraTaskPriority[]).map((priority) => (
+                          <option key={priority} value={priority}>
+                            {priorityLabel[locale][priority]}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
+
+                  <label className="grid gap-2 text-sm">
+                    <span className="font-medium text-slate-700">{locale === "zh" ? "验收标准" : "Acceptance Criteria"}</span>
+                    <Textarea
+                      value={selectedTask.acceptance.join("\n")}
+                      onChange={(event) => handleTaskContentChange({ acceptance: parseAcceptance(event.target.value) })}
+                      className="min-h-28"
+                    />
+                    <span className="text-xs text-slate-500">
+                      {locale === "zh" ? "每行一条验收标准。" : "Use one acceptance criterion per line."}
+                    </span>
+                  </label>
+
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
+                    <div className="mb-3 flex items-center justify-between gap-3">
+                      <div className="text-xs uppercase tracking-[0.18em] text-slate-500">
+                        {locale === "zh" ? "依赖编辑" : "Dependencies Editor"}
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="rounded-full text-rose-600 hover:bg-rose-50 hover:text-rose-700"
+                        onClick={handleDeleteTask}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                        {locale === "zh" ? "删除任务" : "Delete Task"}
+                      </Button>
+                    </div>
+                    <div className="grid gap-2">
+                      {board.tasks.filter((task) => task.id !== selectedTask.id).length ? (
+                        board.tasks
+                          .filter((task) => task.id !== selectedTask.id)
+                          .map((task) => (
+                            <label key={task.id} className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700">
+                              <input
+                                type="checkbox"
+                                checked={selectedTask.dependsOn.includes(task.id)}
+                                onChange={() => handleDependencyToggle(task.id)}
+                                className="h-4 w-4 rounded border-slate-300"
+                              />
+                              <span className="flex-1">{translateTask(task, locale).title}</span>
+                              <Badge variant="outline" className="rounded-full border-slate-300 text-slate-500">
+                                {laneLabels[locale][task.lane]}
+                              </Badge>
+                            </label>
+                          ))
+                      ) : (
+                        <div className="rounded-xl border border-dashed border-slate-300 bg-white px-3 py-3 text-sm text-slate-500">
+                          {locale === "zh" ? "当前没有其他任务可作为依赖。" : "There are no other tasks available as dependencies."}
+                        </div>
+                      )}
                     </div>
                   </div>
 
@@ -812,7 +1112,10 @@ export function OrchestraBoard() {
                     <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
                       <div className="text-xs uppercase tracking-[0.18em] text-slate-500">{locale === "zh" ? "依赖" : "Dependencies"}</div>
                       <div className="mt-3 space-y-2 text-sm text-slate-600">
-                        {selectedTask.dependsOn.length ? selectedTask.dependsOn.map((dep) => <div key={dep}>{dep}</div>) : <div>{locale === "zh" ? "无依赖" : "No dependencies"}</div>}
+                        {selectedTask.dependsOn.length ? selectedTask.dependsOn.map((dep) => {
+                          const dependency = board.tasks.find((task) => task.id === dep);
+                          return <div key={dep}>{dependency ? translateTask(dependency, locale).title : dep}</div>;
+                        }) : <div>{locale === "zh" ? "无依赖" : "No dependencies"}</div>}
                       </div>
                     </div>
                     <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
@@ -846,6 +1149,89 @@ export function OrchestraBoard() {
                   </div>
                 </>
               ) : null}
+            </CardContent>
+          </Card>
+
+          <Card className="border-slate-200/80 shadow-[0_18px_40px_-30px_rgba(15,23,42,0.35)]">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-slate-950">
+                <Plus className="h-5 w-5 text-sky-600" />
+                Task Composer
+              </CardTitle>
+              <CardDescription>
+                {locale === "zh"
+                  ? "手动添加一个新任务，并把它接到当前任务图里。"
+                  : "Add a new task manually and connect it into the current task graph."}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="grid gap-3">
+              <label className="grid gap-2 text-sm">
+                <span className="font-medium text-slate-700">{locale === "zh" ? "任务标题" : "Task Title"}</span>
+                <Input value={newTaskTitle} onChange={(event) => setNewTaskTitle(event.target.value)} />
+              </label>
+              <label className="grid gap-2 text-sm">
+                <span className="font-medium text-slate-700">{locale === "zh" ? "任务摘要" : "Task Summary"}</span>
+                <Textarea value={newTaskSummary} onChange={(event) => setNewTaskSummary(event.target.value)} className="min-h-24" />
+              </label>
+              <div className="grid gap-3 md:grid-cols-3">
+                <label className="grid gap-2 text-sm">
+                  <span className="font-medium text-slate-700">Lane</span>
+                  <select
+                    value={newTaskLane}
+                    onChange={(event) => setNewTaskLane(event.target.value as OrchestraTask["lane"])}
+                    className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm outline-none focus:border-slate-300"
+                  >
+                    {laneOrder.map((lane) => (
+                      <option key={lane} value={lane}>
+                        {laneLabels[locale][lane]}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="grid gap-2 text-sm">
+                  <span className="font-medium text-slate-700">Owner</span>
+                  <select
+                    value={newTaskOwner}
+                    onChange={(event) => setNewTaskOwner(event.target.value as OrchestraExecutor)}
+                    className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm outline-none focus:border-slate-300"
+                  >
+                    {(["planner", "commander", "codex", "claude_code", "portfolio", "human"] as OrchestraExecutor[]).map((owner) => (
+                      <option key={owner} value={owner}>
+                        {ownerLabel(owner, locale)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="grid gap-2 text-sm">
+                  <span className="font-medium text-slate-700">{locale === "zh" ? "优先级" : "Priority"}</span>
+                  <select
+                    value={newTaskPriority}
+                    onChange={(event) => setNewTaskPriority(event.target.value as OrchestraTaskPriority)}
+                    className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm outline-none focus:border-slate-300"
+                  >
+                    {(["low", "medium", "high", "critical"] as OrchestraTaskPriority[]).map((priority) => (
+                      <option key={priority} value={priority}>
+                        {priorityLabel[locale][priority]}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+              <div className="flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50/80 px-4 py-3 text-sm text-slate-600">
+                <span>
+                  {selectedTask
+                    ? locale === "zh"
+                      ? `新任务会默认依赖当前选中的任务：${translateTask(selectedTask, locale).title}`
+                      : `The new task will depend on the currently selected task: ${translateTask(selectedTask, locale).title}`
+                    : locale === "zh"
+                      ? "当前没有选中的任务。"
+                      : "No task is currently selected."}
+                </span>
+                <Button onClick={handleCreateTask} className="rounded-full bg-slate-950 px-5 text-white shadow-sm hover:bg-slate-800">
+                  <Plus className="h-4 w-4" />
+                  {locale === "zh" ? "新增任务" : "Add Task"}
+                </Button>
+              </div>
             </CardContent>
           </Card>
 

@@ -38,6 +38,7 @@ export function buildBoardFromIdea(idea: OrchestraFeatureIdea): OrchestraBoard {
       summary: `Define the scope, user value, and non-negotiable constraints for ${idea.title}.`,
       state: "planning",
       kind: "brief",
+      priority: "high",
       owner: "planner",
       dependsOn: [],
       acceptance: [
@@ -53,6 +54,7 @@ export function buildBoardFromIdea(idea: OrchestraFeatureIdea): OrchestraBoard {
       summary: "Commander converts the brief into tasks, dependencies, and executor assignments.",
       state: "ready",
       kind: "spec",
+      priority: "high",
       owner: chooseExecutor("spec"),
       dependsOn: [`${baseId}-brief`],
       acceptance: [
@@ -68,6 +70,7 @@ export function buildBoardFromIdea(idea: OrchestraFeatureIdea): OrchestraBoard {
       summary: "Concrete repository changes, local verification, and code-oriented execution.",
       state: "ready",
       kind: "implementation",
+      priority: "critical",
       owner: chooseExecutor("implementation"),
       dependsOn: [`${baseId}-plan`],
       acceptance: [
@@ -82,6 +85,7 @@ export function buildBoardFromIdea(idea: OrchestraFeatureIdea): OrchestraBoard {
       summary: "Handle architecture review, specification refinement, and high-context reasoning.",
       state: "ready",
       kind: "review",
+      priority: "medium",
       owner: chooseExecutor("review"),
       dependsOn: [`${baseId}-plan`],
       acceptance: [
@@ -96,6 +100,7 @@ export function buildBoardFromIdea(idea: OrchestraFeatureIdea): OrchestraBoard {
       summary: "Review progress from product, timing, and commercial angles.",
       state: "intake",
       kind: "launch",
+      priority: "medium",
       owner: "portfolio",
       dependsOn: [`${baseId}-codex`, `${baseId}-claude`],
       acceptance: [
