@@ -41,6 +41,8 @@ export interface OrchestraFeatureIdea {
   notes: string[];
 }
 
+export type OrchestraTemplateId = "delivery" | "release" | "support";
+
 export interface OrchestraTask {
   id: string;
   title: string;
@@ -107,4 +109,5 @@ export interface OrchestraScenario {
   title: string;
   summary: string;
   feature: OrchestraFeatureIdea;
+  template?: OrchestraTemplateId;
 }

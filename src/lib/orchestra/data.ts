@@ -157,6 +157,7 @@ export const orchestraScenarios: OrchestraScenario[] = [
     id: "creator-copilot",
     title: "Creator CRM Copilot",
     summary: "A workflow assistant that helps sales and partnerships teams manage creator outreach.",
+    template: "delivery",
     feature: {
       id: "feat-creator-copilot",
       title: "Creator CRM Copilot",
@@ -180,6 +181,7 @@ export const orchestraScenarios: OrchestraScenario[] = [
     id: "release-radar",
     title: "Release Radar",
     summary: "A launch planning system that coordinates QA, docs, rollout, and post-launch feedback.",
+    template: "release",
     feature: {
       id: "feat-release-radar",
       title: "Release Radar",
@@ -203,6 +205,7 @@ export const orchestraScenarios: OrchestraScenario[] = [
     id: "support-autofix",
     title: "Support Autofix Pipeline",
     summary: "A board that converts repeated support pain points into planned fixes and review tasks.",
+    template: "support",
     feature: {
       id: "feat-support-autofix",
       title: "Support Autofix Pipeline",
