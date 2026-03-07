@@ -795,6 +795,28 @@ export function OrchestraBoard() {
 
   const taskCounts = useMemo(() => summarizeByOwner(board.tasks), [board.tasks]);
   const portfolioSignals = useMemo(() => buildPortfolioSignals(board, locale), [board, locale]);
+  const dependencyMap = useMemo(
+    () =>
+      board.tasks
+        .filter((task) => task.dependsOn.length > 0)
+        .map((task) => ({
+          task,
+          dependencies: task.dependsOn
+            .map((dependencyId) => board.tasks.find((candidate) => candidate.id === dependencyId))
+            .filter((dependency): dependency is OrchestraTask => Boolean(dependency)),
+        })),
+    [board.tasks],
+  );
+  const reverseDependencyMap = useMemo(
+    () =>
+      board.tasks
+        .map((task) => ({
+          task,
+          dependents: board.tasks.filter((candidate) => candidate.dependsOn.includes(task.id)),
+        }))
+        .filter((entry) => entry.dependents.length > 0),
+    [board.tasks],
+  );
   const visibleTasks = useMemo(() => board.tasks.filter((task) => {
     if (quickFilter === "ready" && task.state !== "ready") {
       return false;
@@ -1985,6 +2007,89 @@ export function OrchestraBoard() {
                     </div>
                   </div>
                 </>
+              ) : null}
+            </CardContent>
+          </Card>
+
+          <Card className="border-slate-200/80 shadow-[0_18px_40px_-30px_rgba(15,23,42,0.35)]">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-slate-950">
+                <GitPullRequestArrow className="h-5 w-5 text-sky-600" />
+                {locale === "zh" ? "依赖地图" : "Dependency Map"}
+              </CardTitle>
+              <CardDescription>
+                {locale === "zh"
+                  ? "把任务间的依赖和反向依赖直接列出来，方便排查阻塞。"
+                  : "See task dependencies and reverse dependencies without inferring them from cards."}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {dependencyMap.length ? (
+                <div className="space-y-3">
+                  <div className="text-xs uppercase tracking-[0.18em] text-slate-500">
+                    {locale === "zh" ? "依赖关系" : "Dependencies"}
+                  </div>
+                  {dependencyMap.map(({ task, dependencies }) => (
+                    <div key={task.id} className="rounded-2xl border border-slate-200 bg-[linear-gradient(180deg,_#ffffff_0%,_#fbfdff_100%)] p-4">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedTaskId(task.id)}
+                        className="text-left text-sm font-medium text-slate-900 transition-colors hover:text-sky-700"
+                      >
+                        {translateTask(task, locale).title}
+                      </button>
+                      <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+                        <span>{locale === "zh" ? "依赖于" : "depends on"}</span>
+                        {dependencies.map((dependency) => (
+                          <button
+                            key={dependency.id}
+                            type="button"
+                            onClick={() => setSelectedTaskId(dependency.id)}
+                            className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-600 transition-colors hover:border-slate-300 hover:text-slate-900"
+                          >
+                            {translateTask(dependency, locale).title}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-600">
+                  {locale === "zh" ? "当前没有定义依赖关系。" : "No task dependencies are defined yet."}
+                </div>
+              )}
+
+              {reverseDependencyMap.length ? (
+                <div className="space-y-3">
+                  <div className="text-xs uppercase tracking-[0.18em] text-slate-500">
+                    {locale === "zh" ? "反向依赖" : "Reverse Dependencies"}
+                  </div>
+                  {reverseDependencyMap.map(({ task, dependents }) => (
+                    <div key={task.id} className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedTaskId(task.id)}
+                        className="text-left text-sm font-medium text-slate-900 transition-colors hover:text-sky-700"
+                      >
+                        {translateTask(task, locale).title}
+                      </button>
+                      <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+                        <span>{locale === "zh" ? "被这些任务依赖" : "is required by"}</span>
+                        {dependents.map((dependent) => (
+                          <button
+                            key={dependent.id}
+                            type="button"
+                            onClick={() => setSelectedTaskId(dependent.id)}
+                            className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-600 transition-colors hover:border-slate-300 hover:text-slate-900"
+                          >
+                            {translateTask(dependent, locale).title}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
               ) : null}
             </CardContent>
           </Card>
