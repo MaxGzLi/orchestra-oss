@@ -1150,6 +1150,52 @@ export function OrchestraBoard() {
       return haystack.includes(query);
     });
   }, [boardSearchQuery, sortedBoardSnapshots]);
+  const portfolioOverview = useMemo(() => {
+    const boardCount = boardSnapshots.length;
+    const totals = boardSnapshots.reduce((acc, snapshot) => {
+      const tasks = snapshot.board.tasks;
+      acc.tasks += tasks.length;
+      acc.ready += tasks.filter((task) => task.state === "ready").length;
+      acc.blocked += tasks.filter((task) => task.state === "blocked").length;
+      acc.done += tasks.filter((task) => task.state === "done").length;
+      acc.inFlight += tasks.filter((task) => task.state === "in_progress" || task.state === "review").length;
+      return acc;
+    }, { tasks: 0, ready: 0, blocked: 0, done: 0, inFlight: 0 });
+
+    const riskyBoards = [...boardSnapshots]
+      .map((snapshot) => {
+        const blocked = snapshot.board.tasks.filter((task) => task.state === "blocked").length;
+        const criticalOpen = snapshot.board.tasks.filter((task) => task.priority === "critical" && task.state !== "done").length;
+        const ready = snapshot.board.tasks.filter((task) => task.state === "ready").length;
+        const done = snapshot.board.tasks.filter((task) => task.state === "done").length;
+        const completionRate = snapshot.board.tasks.length ? Math.round((done / snapshot.board.tasks.length) * 100) : 0;
+        return {
+          id: snapshot.id,
+          name: snapshot.name,
+          blocked,
+          criticalOpen,
+          ready,
+          completionRate,
+        };
+      })
+      .sort((left, right) => (right.blocked * 3 + right.criticalOpen * 2) - (left.blocked * 3 + left.criticalOpen * 2))
+      .slice(0, 3);
+
+    const recentlyActiveBoards = sortedBoardSnapshots.slice(0, 4).map((snapshot) => ({
+      id: snapshot.id,
+      name: snapshot.name,
+      updatedAt: snapshot.updatedAt,
+      ready: snapshot.board.tasks.filter((task) => task.state === "ready").length,
+      blocked: snapshot.board.tasks.filter((task) => task.state === "blocked").length,
+    }));
+
+    return {
+      boardCount,
+      ...totals,
+      riskyBoards,
+      recentlyActiveBoards,
+    };
+  }, [boardSnapshots, sortedBoardSnapshots]);
 
   useEffect(() => {
     window.localStorage.setItem(LOCALE_KEY, locale);
@@ -1826,6 +1872,102 @@ export function OrchestraBoard() {
                 <Plus className="h-4 w-4" />
                 {locale === "zh" ? "另存为新 Board" : "Save As New Board"}
               </Button>
+            </div>
+
+            <div className="grid gap-3 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
+              <div className="rounded-[20px] border border-slate-200/80 bg-slate-50/80 p-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <div className="text-xs uppercase tracking-[0.18em] text-slate-500">
+                      {locale === "zh" ? "Portfolio 总览" : "Portfolio Overview"}
+                    </div>
+                    <div className="mt-1 text-sm text-slate-600">
+                      {locale === "zh"
+                        ? "跨 board 看当前组合的交付压力。"
+                        : "Track delivery pressure across active boards."}
+                    </div>
+                  </div>
+                  <Badge variant="outline" className="rounded-full border-slate-300 text-slate-600">
+                    {locale === "zh" ? `${portfolioOverview.boardCount} 个 feature` : `${portfolioOverview.boardCount} features`}
+                  </Badge>
+                </div>
+                <div className="mt-3 grid gap-2 sm:grid-cols-4">
+                  <MetricCard icon={Clipboard} label={locale === "zh" ? "总任务" : "Tasks"} value={String(portfolioOverview.tasks)} compact />
+                  <MetricCard icon={Sparkles} label={locale === "zh" ? "Ready" : "Ready"} value={String(portfolioOverview.ready)} compact />
+                  <MetricCard icon={Cpu} label={locale === "zh" ? "进行中" : "In Flight"} value={String(portfolioOverview.inFlight)} compact />
+                  <MetricCard icon={CheckCircle2} label={locale === "zh" ? "阻塞" : "Blocked"} value={String(portfolioOverview.blocked)} compact />
+                </div>
+              </div>
+
+              <div className="rounded-[20px] border border-slate-200/80 bg-slate-50/80 p-3">
+                <div className="text-xs uppercase tracking-[0.18em] text-slate-500">
+                  {locale === "zh" ? "最近活跃" : "Recently Active"}
+                </div>
+                <div className="mt-3 space-y-2">
+                  {portfolioOverview.recentlyActiveBoards.map((snapshot) => (
+                    <button
+                      key={snapshot.id}
+                      type="button"
+                      onClick={() => handleSwitchBoardSnapshot(snapshot.id)}
+                      className="flex w-full items-center justify-between rounded-2xl border border-slate-200 bg-white/90 px-3 py-2 text-left transition-colors hover:border-slate-300"
+                    >
+                      <div className="min-w-0">
+                        <div className="truncate text-sm font-medium text-slate-900">{snapshot.name}</div>
+                        <div className="text-xs text-slate-500">
+                          {snapshot.updatedAt.slice(0, 10)}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1 text-xs">
+                        <Badge variant="outline" className="rounded-full border-emerald-200 text-emerald-700">
+                          {locale === "zh" ? `就绪 ${snapshot.ready}` : `Ready ${snapshot.ready}`}
+                        </Badge>
+                        <Badge variant="outline" className="rounded-full border-rose-200 text-rose-700">
+                          {locale === "zh" ? `阻塞 ${snapshot.blocked}` : `Blocked ${snapshot.blocked}`}
+                        </Badge>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-[20px] border border-slate-200/80 bg-slate-50/80 p-3">
+              <div className="flex items-center justify-between gap-3">
+                <div className="text-xs uppercase tracking-[0.18em] text-slate-500">
+                  {locale === "zh" ? "需要关注的 Feature" : "Boards Needing Attention"}
+                </div>
+                <span className="text-xs text-slate-500">
+                  {locale === "zh" ? "按阻塞和高优先级未完成排序" : "Ranked by blocked and critical open work"}
+                </span>
+              </div>
+              <div className="mt-3 grid gap-2 md:grid-cols-3">
+                {portfolioOverview.riskyBoards.map((snapshot) => (
+                  <button
+                    key={snapshot.id}
+                    type="button"
+                    onClick={() => handleSwitchBoardSnapshot(snapshot.id)}
+                    className="rounded-2xl border border-slate-200 bg-white/90 px-3 py-3 text-left transition-colors hover:border-slate-300"
+                  >
+                    <div className="truncate text-sm font-semibold text-slate-950">{snapshot.name}</div>
+                    <div className="mt-2 flex flex-wrap gap-1 text-xs">
+                      <Badge variant="outline" className="rounded-full border-rose-200 text-rose-700">
+                        {locale === "zh" ? `阻塞 ${snapshot.blocked}` : `Blocked ${snapshot.blocked}`}
+                      </Badge>
+                      <Badge variant="outline" className="rounded-full border-amber-200 text-amber-700">
+                        {locale === "zh" ? `关键 ${snapshot.criticalOpen}` : `Critical ${snapshot.criticalOpen}`}
+                      </Badge>
+                      <Badge variant="outline" className="rounded-full border-slate-300 text-slate-600">
+                        {locale === "zh" ? `完成 ${snapshot.completionRate}%` : `${snapshot.completionRate}% done`}
+                      </Badge>
+                    </div>
+                    <div className="mt-3 text-xs text-slate-500">
+                      {locale === "zh"
+                        ? `还有 ${snapshot.ready} 个 ready 任务可以推进。`
+                        : `${snapshot.ready} ready tasks can move immediately.`}
+                    </div>
+                  </button>
+                ))}
+              </div>
             </div>
 
             <div className="rounded-[20px] border border-slate-200/80 bg-slate-50/80 p-3">
