@@ -196,6 +196,28 @@ const laneLabels: Record<Locale, Record<OrchestraTask["lane"], string>> = {
   },
 };
 
+const laneDescriptions: Record<Locale, Record<OrchestraTask["lane"], string>> = {
+  zh: {
+    strategy: "把模糊想法变成明确目标和约束。",
+    planning: "把目标拆成可执行、可验证的任务切片。",
+    execution: "真正推进实现、评审和交付。",
+    governance: "审视风险、节奏和产品价值。",
+  },
+  en: {
+    strategy: "Turn vague ideas into clear goals and constraints.",
+    planning: "Split goals into executable and reviewable slices.",
+    execution: "Drive implementation, review, and delivery.",
+    governance: "Review risk, momentum, and product value.",
+  },
+};
+
+const laneTone: Record<OrchestraTask["lane"], string> = {
+  strategy: "border-amber-200/80 bg-[linear-gradient(180deg,_rgba(255,251,235,0.92)_0%,_rgba(255,255,255,0.98)_100%)]",
+  planning: "border-sky-200/80 bg-[linear-gradient(180deg,_rgba(240,249,255,0.92)_0%,_rgba(255,255,255,0.98)_100%)]",
+  execution: "border-indigo-200/80 bg-[linear-gradient(180deg,_rgba(238,242,255,0.92)_0%,_rgba(255,255,255,0.98)_100%)]",
+  governance: "border-emerald-200/80 bg-[linear-gradient(180deg,_rgba(236,253,245,0.92)_0%,_rgba(255,255,255,0.98)_100%)]",
+};
+
 const protocolRows: Record<Locale, Array<{ route: string; when: string; why: string }>> = {
   zh: [
     {
@@ -810,7 +832,15 @@ export function OrchestraBoard() {
     return matchesTaskSearch(task, searchQuery);
   }), [board.tasks, laneFilter, ownerFilter, priorityFilter, quickFilter, searchQuery, stateFilter]);
   const laneMap = useMemo(
-    () => laneOrder.map((lane) => ({ lane, tasks: visibleTasks.filter((task) => task.lane === lane) })),
+    () => laneOrder.map((lane) => {
+      const tasks = visibleTasks.filter((task) => task.lane === lane);
+      return {
+        lane,
+        tasks,
+        readyCount: tasks.filter((task) => task.state === "ready").length,
+        blockedCount: tasks.filter((task) => task.state === "blocked").length,
+      };
+    }),
     [visibleTasks],
   );
   const selectedTask = useMemo(
@@ -1569,25 +1599,39 @@ export function OrchestraBoard() {
               </div>
             </div>
             <div className="grid gap-4 xl:grid-cols-2">
-            {laneMap.map(({ lane, tasks }) => (
+            {laneMap.map(({ lane, tasks, readyCount, blockedCount }) => (
               <div
                 key={lane}
                 className={cn(
-                  "rounded-[26px] border border-slate-200 bg-[linear-gradient(180deg,_rgba(255,255,255,0.85)_0%,_rgba(248,250,252,0.96)_100%)] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.7)] transition-all",
+                  "rounded-[26px] border p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.7)] transition-all",
+                  laneTone[lane],
                   dragOverLane === lane && "border-sky-300 bg-[linear-gradient(180deg,_rgba(240,249,255,0.95)_0%,_rgba(239,246,255,0.98)_100%)] ring-2 ring-sky-100",
                 )}
               >
-                <div className="mb-3 flex items-center justify-between">
-                  <div>
-                    <h3 className="font-medium text-slate-900">{laneLabels[locale][lane]}</h3>
-                    <p className="text-xs text-slate-500">{tasks.length} {locale === "zh" ? "个任务" : "tasks"}</p>
+                <div className="mb-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <h3 className="font-medium text-slate-900">{laneLabels[locale][lane]}</h3>
+                      <p className="mt-1 text-xs leading-5 text-slate-500">{laneDescriptions[locale][lane]}</p>
+                    </div>
+                    <Badge variant="outline" className="rounded-full border-slate-300 bg-white/90 text-slate-700">
+                      {tasks.length} {locale === "zh" ? "项" : "items"}
+                    </Badge>
                   </div>
-                  <Badge variant="outline" className="rounded-full border-slate-300 bg-white text-slate-700">
-                    {laneLabels[locale][lane]}
-                  </Badge>
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                    <div className="rounded-full bg-white/90 px-2.5 py-1 text-xs text-slate-600 shadow-sm">
+                      {locale === "zh" ? `可执行 ${readyCount}` : `Ready ${readyCount}`}
+                    </div>
+                    <div className="rounded-full bg-white/90 px-2.5 py-1 text-xs text-slate-600 shadow-sm">
+                      {locale === "zh" ? `阻塞 ${blockedCount}` : `Blocked ${blockedCount}`}
+                    </div>
+                    <div className="rounded-full bg-white/90 px-2.5 py-1 text-xs text-slate-600 shadow-sm">
+                      {locale === "zh" ? `总计 ${tasks.length}` : `Total ${tasks.length}`}
+                    </div>
+                  </div>
                 </div>
                 <div
-                  className="space-y-3"
+                  className="space-y-3 rounded-[22px] border border-white/70 bg-white/45 p-2.5"
                   onDragOver={(event) => {
                     event.preventDefault();
                     setDragOverLane(lane);
