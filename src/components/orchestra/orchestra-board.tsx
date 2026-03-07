@@ -2364,13 +2364,12 @@ export function OrchestraBoard() {
                       ))}
                     </select>
                     <Button
-                      variant="outline"
                       size="sm"
-                      className="rounded-full border-slate-200 bg-white shadow-sm"
+                      className="rounded-full bg-slate-950 text-white shadow-sm hover:bg-slate-800"
                       onClick={handleGenerateBatchHandoff}
                       disabled={!commandTasks.length}
                     >
-                      {locale === "zh" ? "生成批量交接包" : "Generate Batch Handoff"}
+                      {locale === "zh" ? "生成交接包" : "Generate Handoff"}
                     </Button>
                   </div>
                 </div>
@@ -2505,66 +2504,79 @@ export function OrchestraBoard() {
               {packet ? (
                 <>
                   <div className="rounded-2xl border border-slate-200 bg-[linear-gradient(180deg,_#ffffff_0%,_#fbfdff_100%)] p-4">
-                    <div className="flex items-center justify-between gap-3">
-                      <div>
-                        <div className="text-sm font-medium text-slate-900">
-                          {commandPackets.length > 1
-                            ? locale === "zh"
-                              ? `批量交接 · ${commandPackets.length} 个任务`
-                              : `Batch handoff · ${commandPackets.length} tasks`
-                            : packet.title}
+                    <div className="flex flex-col gap-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <div className="text-xs uppercase tracking-[0.18em] text-slate-500">
+                            {locale === "zh" ? "已生成交接包" : "Handoff Ready"}
+                          </div>
+                          <div className="mt-2 text-sm font-medium text-slate-900">
+                            {commandPackets.length > 1
+                              ? locale === "zh"
+                                ? `批量交接 · ${commandPackets.length} 个任务`
+                                : `Batch handoff · ${commandPackets.length} tasks`
+                              : packet.title}
+                          </div>
+                          <p className="mt-1 text-sm text-slate-600">
+                            {commandPackets.length > 1
+                              ? locale === "zh"
+                                ? "Commander 会保留每个任务自己的执行者，但把这批任务作为一个执行批次来下发。"
+                                : "Commander preserves each task executor but issues them as one execution batch."
+                              : packet.reasoning}
+                          </p>
                         </div>
-                        <p className="mt-1 text-sm text-slate-600">
-                          {commandPackets.length > 1
-                            ? locale === "zh"
-                              ? "Commander 会保留每个任务自己的执行者，但把这批任务作为一个执行批次来下发。"
-                              : "Commander preserves each task executor but issues them as one execution batch."
-                            : packet.reasoning}
-                        </p>
-                        <p className="mt-2 text-xs text-slate-500">
-                          {locale === "zh" ? "当前 adapter：" : "Current adapter: "} {selectedAdapter.name}
-                        </p>
+                        <Badge className={cn("rounded-full", ownerTone[packet.executor])}>
+                          {commandPackets.length > 1 ? (locale === "zh" ? "Batch" : "Batch") : ownerLabel(packet.executor, locale)}
+                        </Badge>
                       </div>
-                      <Badge className={cn("rounded-full", ownerTone[packet.executor])}>
-                        {commandPackets.length > 1 ? (locale === "zh" ? "Batch" : "Batch") : ownerLabel(packet.executor, locale)}
-                      </Badge>
+                      <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto_auto] md:items-center">
+                        <div className="rounded-2xl border border-slate-200 bg-white/80 px-4 py-3">
+                          <div className="text-xs uppercase tracking-[0.18em] text-slate-500">
+                            {commandPackets.length > 1 ? "Suggested Batch Command" : "Suggested Command"}
+                          </div>
+                          <pre className="mt-2 overflow-x-auto whitespace-pre-wrap text-sm leading-6 text-slate-700"><code>{commandPackets.length > 1 ? buildBatchCommand(commandPackets) : packet.suggestedCommand}</code></pre>
+                        </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="rounded-full border-slate-200 bg-white shadow-sm"
+                          onClick={() => handleCopy(commandPackets.length > 1 ? buildBatchCommand(commandPackets) : packet.suggestedCommand)}
+                        >
+                          <Copy className="h-4 w-4" />
+                          {locale === "zh" ? "复制命令" : "Copy"}
+                        </Button>
+                        <Button size="sm" className="rounded-full bg-slate-950 text-white shadow-sm hover:bg-slate-800" onClick={handleRunPacket}>
+                          <Cpu className="h-4 w-4" />
+                          {locale === "zh" ? "立即运行" : "Run Now"}
+                        </Button>
+                      </div>
                     </div>
                   </div>
 
-                  <div className="rounded-2xl border border-slate-900/80 bg-slate-950 p-4 text-slate-100 shadow-[0_18px_40px_-24px_rgba(15,23,42,0.6)]">
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="text-xs uppercase tracking-[0.18em] text-slate-400">
-                        {commandPackets.length > 1 ? "Suggested Batch Commands" : "Suggested Command"}
-                      </div>
+                  <details className="group rounded-2xl border border-slate-200 bg-white">
+                    <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-medium text-slate-900">
+                      <span>{commandPackets.length > 1 ? (locale === "zh" ? "批量 Prompt" : "Batch Prompt") : (locale === "zh" ? "执行 Prompt" : "Executor Prompt")}</span>
                       <div className="flex items-center gap-2">
                         <Button
-                          variant="secondary"
+                          variant="outline"
                           size="sm"
-                          className="rounded-full"
-                          onClick={() => handleCopy(commandPackets.length > 1 ? buildBatchCommand(commandPackets) : packet.suggestedCommand)}
+                          className="rounded-full border-slate-200 bg-white shadow-sm"
+                          onClick={(event) => {
+                            event.preventDefault();
+                            handleCopy(commandPackets.length > 1 ? commandPackets.map((item) => item.prompt).join("\n\n---\n\n") : packet.prompt);
+                          }}
                         >
                           <Copy className="h-4 w-4" />
                           {locale === "zh" ? "复制" : "Copy"}
                         </Button>
-                        <Button size="sm" className="rounded-full bg-white text-slate-950 shadow-sm hover:bg-slate-100" onClick={handleRunPacket}>
-                          <Cpu className="h-4 w-4" />
-                          {locale === "zh" ? "运行" : "Run"}
-                        </Button>
+                        <span className="text-xs text-slate-500 group-open:hidden">{locale === "zh" ? "展开" : "Expand"}</span>
+                        <span className="hidden text-xs text-slate-500 group-open:inline">{locale === "zh" ? "收起" : "Collapse"}</span>
                       </div>
+                    </summary>
+                    <div className="border-t border-slate-200 p-4">
+                      <pre className="max-h-80 overflow-auto whitespace-pre-wrap text-sm leading-6 text-slate-600"><code>{commandPackets.length > 1 ? commandPackets.map((item) => `# ${item.title}\n${item.prompt}`).join("\n\n---\n\n") : packet.prompt}</code></pre>
                     </div>
-                    <pre className="mt-3 overflow-x-auto whitespace-pre-wrap text-sm leading-6"><code>{commandPackets.length > 1 ? buildBatchCommand(commandPackets) : packet.suggestedCommand}</code></pre>
-                  </div>
-
-                  <div className="rounded-2xl border border-slate-200 bg-[linear-gradient(180deg,_#ffffff_0%,_#fbfdff_100%)] p-4">
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="text-sm font-medium text-slate-900">{commandPackets.length > 1 ? (locale === "zh" ? "批量执行 Prompt" : "Batch Executor Prompt") : (locale === "zh" ? "执行 Prompt" : "Executor Prompt")}</div>
-                      <Button variant="outline" size="sm" className="rounded-full border-slate-200 bg-white shadow-sm" onClick={() => handleCopy(commandPackets.length > 1 ? commandPackets.map((item) => item.prompt).join("\n\n---\n\n") : packet.prompt)}>
-                        <Copy className="h-4 w-4" />
-                        {locale === "zh" ? "复制" : "Copy"}
-                      </Button>
-                    </div>
-                    <pre className="mt-3 max-h-80 overflow-auto whitespace-pre-wrap text-sm leading-6 text-slate-600"><code>{commandPackets.length > 1 ? commandPackets.map((item) => `# ${item.title}\n${item.prompt}`).join("\n\n---\n\n") : packet.prompt}</code></pre>
-                  </div>
+                  </details>
 
                   {runResult ? (
                     <div className="rounded-2xl border border-slate-200 bg-[linear-gradient(180deg,_#ffffff_0%,_#fbfdff_100%)] p-4">
