@@ -77,6 +77,15 @@ type DispatchQueueItem = {
   priority: OrchestraTaskPriority;
 };
 type DispatchQueueStrategy = "board" | "owner" | "priority";
+type DispatchHistoryEntry = {
+  id: string;
+  createdAt: string;
+  boardId: string;
+  boardName: string;
+  strategy: DispatchQueueStrategy;
+  taskIds: string[];
+};
+type RunStatusFilter = "all" | "succeeded" | "failed";
 
 const LOCALE_KEY = "orchestra-oss-locale";
 const STATE_KEY = "orchestra-oss-state";
@@ -874,6 +883,9 @@ export function OrchestraBoard() {
   const [boardNameDraft, setBoardNameDraft] = useState(defaultBoard.feature.title);
   const [dispatchQueue, setDispatchQueue] = useState<DispatchQueueItem[]>([]);
   const [dispatchStrategy, setDispatchStrategy] = useState<DispatchQueueStrategy>("board");
+  const [dispatchHistory, setDispatchHistory] = useState<DispatchHistoryEntry[]>([]);
+  const [autoLoadNextBatch, setAutoLoadNextBatch] = useState(false);
+  const [runStatusFilter, setRunStatusFilter] = useState<RunStatusFilter>("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [quickFilter, setQuickFilter] = useState<QuickFilter>("all");
   const [laneFilter, setLaneFilter] = useState<OrchestraTask["lane"] | "all">("all");
@@ -1080,6 +1092,9 @@ export function OrchestraBoard() {
           selectedCommandTaskIds?: string[];
           dispatchQueue?: DispatchQueueItem[];
           dispatchStrategy?: DispatchQueueStrategy;
+          dispatchHistory?: DispatchHistoryEntry[];
+          autoLoadNextBatch?: boolean;
+          runStatusFilter?: RunStatusFilter;
           selectedTemplateId?: OrchestraTemplateId;
           batchStrategy?: BatchStrategy;
           adapterMode?: ExecutorAdapterMode;
@@ -1131,6 +1146,9 @@ export function OrchestraBoard() {
 
         setDispatchQueue(parsed.dispatchQueue ?? []);
         setDispatchStrategy(parsed.dispatchStrategy ?? "board");
+        setDispatchHistory(parsed.dispatchHistory ?? []);
+        setAutoLoadNextBatch(parsed.autoLoadNextBatch ?? false);
+        setRunStatusFilter(parsed.runStatusFilter ?? "all");
         setBatchStrategy(parsed.batchStrategy ?? "manual");
         setAdapterMode(parsed.adapterMode ?? "simulated-local");
         setExecutionStage(parsed.executionStage ?? "preview");
@@ -1318,6 +1336,59 @@ export function OrchestraBoard() {
       orderedQueue,
     };
   }, [dispatchQueue, dispatchStrategy]);
+  const batchPreflight = useMemo(() => {
+    const warnings: string[] = [];
+    const checks = [
+      {
+        label: locale === "zh" ? "已选任务" : "Selected tasks",
+        ok: orderedCommandTasks.length > 0,
+        detail: locale === "zh"
+          ? `当前批次包含 ${orderedCommandTasks.length} 个任务。`
+          : `${orderedCommandTasks.length} tasks are in the current batch.`,
+      },
+      {
+        label: locale === "zh" ? "命令模板" : "Command templates",
+        ok: Boolean(commandTemplates.codex.trim() && commandTemplates.claude_code.trim()),
+        detail: locale === "zh"
+          ? "Codex 和 Claude Code 模板都已配置。"
+          : "Both Codex and Claude Code templates are configured.",
+      },
+      {
+        label: locale === "zh" ? "执行模式" : "Execution mode",
+        ok: executionStage !== "live",
+        detail: executionStage === "live"
+          ? (locale === "zh" ? "当前仍是安全演示仓库，live 只作为占位。" : "This is still a safe demo repo; live is placeholder only.")
+          : (locale === "zh" ? "当前模式仍然不会调用外部进程。" : "Current mode still avoids external process execution."),
+      },
+      {
+        label: locale === "zh" ? "可运行任务" : "Runnable tasks",
+        ok: runnableTaskCount > 0,
+        detail: locale === "zh"
+          ? `${runnableTaskCount} 个任务满足依赖，可以真正进入批量执行。`
+          : `${runnableTaskCount} tasks satisfy dependencies and can execute in this batch.`,
+      },
+    ];
+
+    if (!orderedCommandTasks.length) {
+      warnings.push(locale === "zh" ? "先从看板或 dispatch queue 里挑出一批任务。" : "Select tasks from the board or dispatch queue first.");
+    }
+    if (!runnableTaskCount && orderedCommandTasks.length) {
+      warnings.push(locale === "zh" ? "当前批次里没有 ready 且依赖满足的任务。" : "No tasks in the batch are ready with satisfied dependencies.");
+    }
+    if (executionStage === "live") {
+      warnings.push(locale === "zh" ? "live 仍是占位模式，适合演示接口，不适合期待真实 CLI 运行。" : "Live is still a placeholder mode for demoing the interface, not real CLI execution.");
+    }
+
+    return {
+      checks,
+      warnings,
+      ready: orderedCommandTasks.length > 0 && runnableTaskCount > 0,
+    };
+  }, [commandTemplates.claude_code, commandTemplates.codex, executionStage, locale, orderedCommandTasks.length, runnableTaskCount]);
+  const visibleRunHistory = useMemo(
+    () => runHistory.filter((record) => runStatusFilter === "all" || record.status === runStatusFilter),
+    [runHistory, runStatusFilter],
+  );
 
   useEffect(() => {
     window.localStorage.setItem(LOCALE_KEY, locale);
@@ -1380,6 +1451,9 @@ export function OrchestraBoard() {
         boards: boardSnapshots,
         dispatchQueue,
         dispatchStrategy,
+        dispatchHistory,
+        autoLoadNextBatch,
+        runStatusFilter,
         selectedTemplateId,
         batchStrategy,
         adapterMode,
@@ -1387,7 +1461,7 @@ export function OrchestraBoard() {
         commandTemplates,
       }),
     );
-  }, [activeBoardId, adapterMode, batchStrategy, boardSnapshots, commandTemplates, dispatchQueue, dispatchStrategy, executionStage, selectedTemplateId]);
+  }, [activeBoardId, adapterMode, autoLoadNextBatch, batchStrategy, boardSnapshots, commandTemplates, dispatchHistory, dispatchQueue, dispatchStrategy, executionStage, runStatusFilter, selectedTemplateId]);
 
   function handleGeneratePlan() {
     const idea: OrchestraFeatureIdea = {
@@ -1562,6 +1636,14 @@ export function OrchestraBoard() {
       setPacket(buildCommandPacket(snapshot.board.feature, leadTask, leadTask.owner, commandTemplates));
     }
     setInspectorTab("batch");
+    setDispatchHistory((current) => [{
+      id: `dispatch-${Date.now()}`,
+      createdAt: new Date().toISOString(),
+      boardId: snapshot.id,
+      boardName: snapshot.name,
+      strategy: dispatchStrategy,
+      taskIds,
+    }, ...current].slice(0, 20));
     setDispatchQueue((current) => current.filter((item) => !queueItems.some((queued) => queued.boardId === item.boardId && queued.taskId === item.taskId)));
   }
 
@@ -1673,7 +1755,7 @@ export function OrchestraBoard() {
     setInspectorTab("batch");
   }
 
-  function handleRunPacket() {
+  function executeCurrentBatch() {
     if (!commandPackets.length) {
       return;
     }
@@ -1754,6 +1836,47 @@ export function OrchestraBoard() {
             : task
       )),
     }));
+  }
+
+  function handleRunPacket() {
+    executeCurrentBatch();
+  }
+
+  function handleRunAndLoadNext() {
+    executeCurrentBatch();
+    if (autoLoadNextBatch && nextDispatchTarget) {
+      handleLoadDispatchQueue();
+    }
+  }
+
+  function handleRetryRun(record: OrchestraRunRecord) {
+    const task = board.tasks.find((candidate) => candidate.id === record.taskId);
+    if (!task) {
+      return;
+    }
+
+    setSelectedTaskId(task.id);
+    setSelectedCommandTaskIds([task.id]);
+    setPacket(buildCommandPacket(board.feature, task, task.owner, commandTemplates));
+    setRunResult(null);
+    setInspectorTab("batch");
+  }
+
+  function handleRetryFailedRuns() {
+    const failedTaskIds = runHistory.filter((record) => record.status === "failed").map((record) => record.taskId);
+    const nextTaskIds = Array.from(new Set(failedTaskIds)).filter((taskId) => board.tasks.some((task) => task.id === taskId));
+    if (!nextTaskIds.length) {
+      return;
+    }
+
+    setSelectedCommandTaskIds(nextTaskIds);
+    setSelectedTaskId(nextTaskIds[0] ?? "");
+    const leadTask = board.tasks.find((task) => task.id === nextTaskIds[0]);
+    if (leadTask) {
+      setPacket(buildCommandPacket(board.feature, leadTask, leadTask.owner, commandTemplates));
+    }
+    setRunResult(null);
+    setInspectorTab("batch");
   }
 
   async function handleCopy(text: string) {
@@ -3765,6 +3888,46 @@ export function OrchestraBoard() {
                   </div>
                 </div>
               </details>
+              <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                  <div>
+                    <div className="text-sm font-medium text-slate-900">
+                      {locale === "zh" ? "执行预检" : "Execution Preflight"}
+                    </div>
+                    <p className="mt-1 text-sm text-slate-600">
+                      {batchPreflight.ready
+                        ? (locale === "zh" ? "当前批次可以执行。" : "The current batch is ready to run.")
+                        : (locale === "zh" ? "当前批次还有前置问题，先看下面的提示。" : "The current batch still has prerequisites to resolve.")}
+                    </p>
+                  </div>
+                  <label className="flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+                    <input
+                      type="checkbox"
+                      checked={autoLoadNextBatch}
+                      onChange={(event) => setAutoLoadNextBatch(event.target.checked)}
+                    />
+                    {locale === "zh" ? "运行后自动装载下一批" : "Auto-load next queue after run"}
+                  </label>
+                </div>
+                <div className="mt-3 grid gap-2 lg:grid-cols-2">
+                  {batchPreflight.checks.map((check) => (
+                    <div key={check.label} className="rounded-2xl border border-slate-200 bg-slate-50/80 p-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="text-sm font-medium text-slate-900">{check.label}</div>
+                        <Badge className={cn("rounded-full border", check.ok ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-amber-200 bg-amber-50 text-amber-700")}>
+                          {check.ok ? (locale === "zh" ? "通过" : "OK") : (locale === "zh" ? "注意" : "Check")}
+                        </Badge>
+                      </div>
+                      <div className="mt-2 text-xs leading-5 text-slate-500">{check.detail}</div>
+                    </div>
+                  ))}
+                </div>
+                {batchPreflight.warnings.length ? (
+                  <div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50/70 p-3 text-sm text-amber-800">
+                    {batchPreflight.warnings.join(" ")}
+                  </div>
+                ) : null}
+              </div>
               {packet ? (
                 <>
                   <div className="rounded-2xl border border-slate-200 bg-[linear-gradient(180deg,_#ffffff_0%,_#fbfdff_100%)] p-4">
@@ -3812,6 +3975,16 @@ export function OrchestraBoard() {
                         <Button size="sm" className="rounded-full bg-slate-950 text-white shadow-sm hover:bg-slate-800" onClick={handleRunPacket}>
                           <Cpu className="h-4 w-4" />
                           {locale === "zh" ? "立即运行" : "Run Now"}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="rounded-full border-slate-200 bg-white shadow-sm"
+                          onClick={handleRunAndLoadNext}
+                          disabled={!commandPackets.length}
+                        >
+                          <Cpu className="h-4 w-4" />
+                          {locale === "zh" ? "运行并装载下一批" : "Run + Next Queue"}
                         </Button>
                       </div>
                     </div>
@@ -4045,7 +4218,77 @@ export function OrchestraBoard() {
                   ))}
                 </div>
               ) : null}
-              {runHistory.length ? runHistory.map((record) => (
+              {dispatchHistory.length ? (
+                <div className="space-y-3">
+                  <div className="text-xs uppercase tracking-[0.18em] text-slate-500">
+                    {locale === "zh" ? "Dispatch 历史" : "Dispatch History"}
+                  </div>
+                  {dispatchHistory.map((entry) => (
+                    <div key={entry.id} className="rounded-2xl border border-slate-200 bg-[linear-gradient(180deg,_#ffffff_0%,_#fbfdff_100%)] p-4">
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <div className="text-sm font-medium text-slate-900">{entry.boardName}</div>
+                          <p className="mt-1 text-xs text-slate-500">
+                            {entry.createdAt.slice(0, 19).replace("T", " ")} · {entry.strategy}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Badge variant="outline" className="rounded-full border-slate-300 text-slate-600">
+                            {locale === "zh" ? `${entry.taskIds.length} 个任务` : `${entry.taskIds.length} tasks`}
+                          </Badge>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="rounded-full border border-transparent hover:border-slate-200 hover:bg-slate-50"
+                            onClick={() => {
+                              const snapshot = boardSnapshots.find((candidate) => candidate.id === entry.boardId);
+                              if (!snapshot) {
+                                return;
+                              }
+                              hydrateFromSnapshot({
+                                ...snapshot,
+                                selectedTaskId: entry.taskIds[0] ?? snapshot.selectedTaskId,
+                                selectedCommandTaskIds: entry.taskIds,
+                              });
+                              setInspectorTab("batch");
+                            }}
+                          >
+                            {locale === "zh" ? "重新装载" : "Reload Batch"}
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+              {runHistory.length ? (
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2">
+                    <div className="text-xs uppercase tracking-[0.18em] text-slate-500">
+                      {locale === "zh" ? "单次运行" : "Run Records"}
+                    </div>
+                    <select
+                      value={runStatusFilter}
+                      onChange={(event) => setRunStatusFilter(event.target.value as RunStatusFilter)}
+                      className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-700 shadow-sm outline-none focus:border-slate-300"
+                    >
+                      <option value="all">{locale === "zh" ? "全部状态" : "All statuses"}</option>
+                      <option value="succeeded">{locale === "zh" ? "仅成功" : "Succeeded"}</option>
+                      <option value="failed">{locale === "zh" ? "仅失败" : "Failed"}</option>
+                    </select>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="rounded-full border-slate-200 bg-white"
+                    onClick={handleRetryFailedRuns}
+                    disabled={!runHistory.some((record) => record.status === "failed")}
+                  >
+                    {locale === "zh" ? "重试失败任务" : "Retry Failed"}
+                  </Button>
+                </div>
+              ) : null}
+              {visibleRunHistory.length ? visibleRunHistory.map((record) => (
                 <div key={record.id} className="rounded-2xl border border-slate-200 bg-[linear-gradient(180deg,_#ffffff_0%,_#fbfdff_100%)] p-4">
                   <div className="flex items-center justify-between gap-3">
                     <div>
@@ -4084,14 +4327,24 @@ export function OrchestraBoard() {
                   </div>
                   <pre className="mt-3 max-h-28 overflow-auto whitespace-pre-wrap text-xs leading-5 text-slate-600"><code>{record.command} {record.args.join(" ")}</code></pre>
                   <div className="mt-3 flex items-center justify-between gap-3">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="rounded-full border border-transparent hover:border-slate-200 hover:bg-slate-50"
-                      onClick={() => handleOpenTask(record.taskId)}
-                    >
-                      {locale === "zh" ? "定位任务" : "Open Task"}
-                    </Button>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="rounded-full border border-transparent hover:border-slate-200 hover:bg-slate-50"
+                        onClick={() => handleOpenTask(record.taskId)}
+                      >
+                        {locale === "zh" ? "定位任务" : "Open Task"}
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="rounded-full border border-transparent hover:border-slate-200 hover:bg-slate-50"
+                        onClick={() => handleRetryRun(record)}
+                      >
+                        {locale === "zh" ? "重试" : "Retry"}
+                      </Button>
+                    </div>
                     <Button variant="ghost" size="sm" className="rounded-full border border-transparent hover:border-slate-200 hover:bg-slate-50" onClick={() => setExpandedRunId((current) => current === record.id ? null : record.id)}>
                       {expandedRunId === record.id ? (locale === "zh" ? "收起详情" : "Hide Details") : (locale === "zh" ? "查看详情" : "Show Details")}
                     </Button>
@@ -4109,7 +4362,11 @@ export function OrchestraBoard() {
                     </div>
                   ) : null}
                 </div>
-              )) : (
+              )) : runHistory.length ? (
+                <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-6 text-sm leading-6 text-slate-600">
+                  {locale === "zh" ? "当前筛选下没有运行记录。" : "No run records match the current filter."}
+                </div>
+              ) : (
                 <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-6 text-sm leading-6 text-slate-600">
                   {locale === "zh" ? "还没有执行记录。先生成 handoff，再点击运行。" : "No execution records yet. Generate a handoff first, then run it."}
                 </div>
