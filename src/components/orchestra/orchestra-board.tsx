@@ -1300,7 +1300,7 @@ export function OrchestraBoard() {
   return (
     <div className="mx-auto flex max-w-7xl flex-col gap-6 pb-10">
       <section className="grid gap-3">
-        <Card className="border-slate-200/80 bg-[linear-gradient(135deg,_#ffffff_0%,_#f8fbff_58%,_#f8fafc_100%)] shadow-[0_18px_40px_-30px_rgba(15,23,42,0.35)]">
+        <Card className="border-slate-200/80 bg-[linear-gradient(135deg,_#ffffff_0%,_#f8fbff_58%,_#f8fafc_100%)] shadow-[0_14px_30px_-26px_rgba(15,23,42,0.2)]">
           <CardContent className="space-y-3 p-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="flex flex-wrap items-center gap-2">
@@ -1394,7 +1394,7 @@ export function OrchestraBoard() {
         </Card>
       </section>
 
-      <details className="group rounded-[28px] border border-slate-200 bg-white/90 shadow-[0_18px_40px_-30px_rgba(15,23,42,0.25)]">
+      <details className="group rounded-[28px] border border-slate-200 bg-slate-50/70 shadow-[0_14px_30px_-26px_rgba(15,23,42,0.14)]">
         <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-5 py-4 text-sm font-medium text-slate-900">
           <span>{locale === "zh" ? "工作台设置与低频信息" : "Workspace Setup and Secondary Panels"}</span>
           <span className="text-xs text-slate-500 group-open:hidden">{locale === "zh" ? "展开" : "Expand"}</span>
@@ -1475,7 +1475,7 @@ export function OrchestraBoard() {
       </details>
 
       <section className="grid gap-6 2xl:grid-cols-[1.1fr_0.9fr]">
-        <Card className="border-slate-200/80 shadow-[0_18px_40px_-30px_rgba(15,23,42,0.35)]">
+        <Card className="border-slate-200/80 bg-white/92 shadow-[0_14px_30px_-26px_rgba(15,23,42,0.18)]">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-slate-950">
               <GitPullRequestArrow className="h-5 w-5 text-sky-600" />
@@ -1488,7 +1488,7 @@ export function OrchestraBoard() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="rounded-[26px] border border-slate-200 bg-slate-50/80 p-4">
+            <div className="rounded-[26px] border border-slate-200 bg-slate-50/65 p-4">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
                   <div className="text-sm font-medium text-slate-900">{locale === "zh" ? "任务筛选" : "Task Filters"}</div>
@@ -1668,7 +1668,7 @@ export function OrchestraBoard() {
                             handleTaskDrop(lane, index);
                           }}
                           className={cn(
-                            "rounded-2xl border border-slate-200 bg-[linear-gradient(180deg,_#ffffff_0%,_#fbfdff_100%)] p-3.5 shadow-[0_12px_30px_-24px_rgba(15,23,42,0.45)] transition-all",
+                            "rounded-2xl border border-slate-200 bg-white/94 p-3.5 shadow-[0_10px_24px_-24px_rgba(15,23,42,0.18)] transition-all",
                             selectedTaskId === task.id && "border-slate-300 ring-2 ring-slate-950/10",
                             draggedTaskId === task.id && "scale-[0.985] opacity-60",
                             dragOverLane === lane && dragOverIndex === index && "border-sky-300",
@@ -1767,7 +1767,7 @@ export function OrchestraBoard() {
         </Card>
 
         <div className="grid content-start gap-4 xl:sticky xl:top-4 xl:max-h-[calc(100vh-2rem)] xl:overflow-y-auto">
-          <div className="rounded-[24px] border border-slate-200 bg-white/95 p-2 shadow-[0_18px_40px_-30px_rgba(15,23,42,0.2)]">
+          <div className="rounded-[24px] border border-slate-200 bg-white/90 p-2 shadow-[0_10px_24px_-24px_rgba(15,23,42,0.14)]">
             <div className="grid grid-cols-4 gap-2">
               {([
                 ["task", locale === "zh" ? "任务" : "Task"],
@@ -1790,7 +1790,7 @@ export function OrchestraBoard() {
             </div>
           </div>
 
-          {inspectorTab === "task" ? <Card className="border-slate-200/80 shadow-[0_18px_40px_-30px_rgba(15,23,42,0.35)]">
+          {inspectorTab === "task" ? <Card className="border-slate-200/80 bg-white/92 shadow-[0_14px_30px_-26px_rgba(15,23,42,0.18)]">
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-slate-950">
                 <Clipboard className="h-5 w-5 text-slate-950" />
@@ -2079,7 +2079,7 @@ export function OrchestraBoard() {
             </CardContent>
           </Card> : null}
 
-          {inspectorTab === "deps" ? <Card className="border-slate-200/80 shadow-[0_18px_40px_-30px_rgba(15,23,42,0.35)]">
+          {inspectorTab === "deps" ? <Card className="border-slate-200/80 bg-white/92 shadow-[0_14px_30px_-26px_rgba(15,23,42,0.18)]">
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-slate-950">
                 <GitPullRequestArrow className="h-5 w-5 text-sky-600" />
@@ -2162,7 +2162,7 @@ export function OrchestraBoard() {
             </CardContent>
           </Card> : null}
 
-          {inspectorTab === "task" ? <Card className="border-slate-200/80 shadow-[0_18px_40px_-30px_rgba(15,23,42,0.35)]">
+          {inspectorTab === "task" ? <Card className="border-slate-200/80 bg-white/92 shadow-[0_14px_30px_-26px_rgba(15,23,42,0.18)]">
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-slate-950">
                 <Plus className="h-5 w-5 text-sky-600" />
@@ -2245,7 +2245,7 @@ export function OrchestraBoard() {
             </CardContent>
           </Card> : null}
 
-          {inspectorTab === "batch" ? <Card className="border-slate-200/80 shadow-[0_18px_40px_-30px_rgba(15,23,42,0.35)]">
+          {inspectorTab === "batch" ? <Card className="border-slate-200/80 bg-white/92 shadow-[0_14px_30px_-26px_rgba(15,23,42,0.18)]">
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-slate-950">
                 <Cpu className="h-5 w-5 text-slate-950" />
@@ -2513,7 +2513,7 @@ export function OrchestraBoard() {
             </CardContent>
           </Card> : null}
 
-          <details className="group rounded-[24px] border border-slate-200 bg-white/95 shadow-[0_18px_40px_-30px_rgba(15,23,42,0.18)]">
+          <details className="group rounded-[24px] border border-slate-200 bg-slate-50/75 shadow-[0_10px_24px_-24px_rgba(15,23,42,0.12)]">
             <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-medium text-slate-900">
               <span>{locale === "zh" ? "辅助视图" : "Secondary Views"}</span>
               <span className="text-xs text-slate-500 group-open:hidden">{locale === "zh" ? "展开" : "Expand"}</span>
@@ -2607,7 +2607,7 @@ export function OrchestraBoard() {
             </div>
           </details>
 
-          {inspectorTab === "runs" ? <Card className="border-slate-200/80 shadow-[0_18px_40px_-30px_rgba(15,23,42,0.35)]">
+          {inspectorTab === "runs" ? <Card className="border-slate-200/80 bg-white/92 shadow-[0_14px_30px_-26px_rgba(15,23,42,0.18)]">
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-slate-950">
                 <CheckCircle2 className="h-5 w-5 text-slate-950" />
