@@ -636,6 +636,85 @@ function isTaskRunnable(task: OrchestraTask, board: OrchestraBoard, batchTaskIds
   };
 }
 
+function buildPortfolioSignals(board: OrchestraBoard, locale: Locale) {
+  const blockedTasks = board.tasks.filter((task) => task.state === "blocked");
+  const readyTasks = board.tasks.filter((task) => task.state === "ready");
+  const executionTasks = board.tasks.filter((task) => task.lane === "execution");
+  const uncommentedExecutionTasks = executionTasks.filter((task) => task.comments.length === 0);
+  const criticalTasks = board.tasks.filter((task) => task.priority === "critical");
+  const doneTasks = board.tasks.filter((task) => task.state === "done");
+  const completionRate = board.tasks.length ? Math.round((doneTasks.length / board.tasks.length) * 100) : 0;
+
+  return [
+    locale === "zh"
+      ? {
+          title: "交付健康度",
+          tone: blockedTasks.length ? "rose" : "emerald",
+          detail: blockedTasks.length
+            ? `${blockedTasks.length} 个任务处于阻塞状态，建议先清理依赖或重新拆分。`
+            : `当前没有阻塞任务，整体交付链路比较健康。`,
+        }
+      : {
+          title: "Delivery health",
+          tone: blockedTasks.length ? "rose" : "emerald",
+          detail: blockedTasks.length
+            ? `${blockedTasks.length} tasks are blocked. Clear dependencies or re-scope them first.`
+            : "No tasks are currently blocked, so the delivery graph looks healthy.",
+        },
+    locale === "zh"
+      ? {
+          title: "执行面负载",
+          tone: readyTasks.length > 3 ? "amber" : "sky",
+          detail:
+            readyTasks.length > 3
+              ? `有 ${readyTasks.length} 个 ready 任务等待执行，适合继续做批量分发。`
+              : `当前 ready 任务是 ${readyTasks.length} 个，执行负载仍然可控。`,
+        }
+      : {
+          title: "Execution load",
+          tone: readyTasks.length > 3 ? "amber" : "sky",
+          detail:
+            readyTasks.length > 3
+              ? `${readyTasks.length} ready tasks are waiting. A larger execution batch makes sense now.`
+              : `${readyTasks.length} tasks are ready, so executor load is still manageable.`,
+        },
+    locale === "zh"
+      ? {
+          title: "协作记录",
+          tone: uncommentedExecutionTasks.length ? "slate" : "emerald",
+          detail:
+            uncommentedExecutionTasks.length
+              ? `${uncommentedExecutionTasks.length} 个执行任务还没有评论，建议记录决策和风险。`
+              : "执行任务都已经有评论记录，协作上下文比较完整。",
+        }
+      : {
+          title: "Collaboration trail",
+          tone: uncommentedExecutionTasks.length ? "slate" : "emerald",
+          detail:
+            uncommentedExecutionTasks.length
+              ? `${uncommentedExecutionTasks.length} execution tasks still have no comments. Capture decisions and risks there.`
+              : "All execution tasks already have comments, so collaboration context looks solid.",
+        },
+    locale === "zh"
+      ? {
+          title: "业务推进感知",
+          tone: criticalTasks.length && completionRate < 50 ? "amber" : "sky",
+          detail:
+            criticalTasks.length && completionRate < 50
+              ? `还有 ${criticalTasks.length} 个最高优先级任务未完全消化，当前完成度约 ${completionRate}%。`
+              : `当前整体完成度约 ${completionRate}%，可以开始关注下一阶段机会。`,
+        }
+      : {
+          title: "Portfolio signal",
+          tone: criticalTasks.length && completionRate < 50 ? "amber" : "sky",
+          detail:
+            criticalTasks.length && completionRate < 50
+              ? `${criticalTasks.length} critical tasks are still active and completion is about ${completionRate}%.`
+              : `Overall completion is about ${completionRate}%, so you can start looking at follow-on opportunities.`,
+        },
+  ];
+}
+
 export function OrchestraBoard() {
   const defaultBoard = getDefaultOrchestraBoard();
   const [locale, setLocale] = useState<Locale>(getInitialLocale);
@@ -665,6 +744,7 @@ export function OrchestraBoard() {
   const [newTaskPriority, setNewTaskPriority] = useState<OrchestraTaskPriority>("medium");
 
   const taskCounts = useMemo(() => summarizeByOwner(board.tasks), [board.tasks]);
+  const portfolioSignals = useMemo(() => buildPortfolioSignals(board, locale), [board, locale]);
   const laneMap = useMemo(
     () => laneOrder.map((lane) => ({ lane, tasks: board.tasks.filter((task) => task.lane === lane) })),
     [board.tasks],
@@ -1949,6 +2029,42 @@ export function OrchestraBoard() {
                   </div>
                   <p className="mt-3 text-sm leading-6 text-slate-600">{agent.mission}</p>
                   <p className="mt-3 text-xs leading-5 text-slate-500">{agent.commandStyle}</p>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+
+          <Card className="border-slate-200/80 shadow-[0_18px_40px_-30px_rgba(15,23,42,0.35)]">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-slate-950">
+                <Flag className="h-5 w-5 text-amber-500" />
+                {locale === "zh" ? "Portfolio Signals" : "Portfolio Signals"}
+              </CardTitle>
+              <CardDescription>
+                {locale === "zh"
+                  ? "根据当前任务图自动生成的全局信号和建议。"
+                  : "Automatically generated portfolio-level signals from the current board."}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {portfolioSignals.map((signal) => (
+                <div key={signal.title} className="rounded-2xl border border-slate-200 bg-[linear-gradient(180deg,_#ffffff_0%,_#fbfdff_100%)] p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="text-sm font-medium text-slate-900">{signal.title}</div>
+                    <Badge
+                      className={cn(
+                        "rounded-full border",
+                        signal.tone === "rose" && "border-rose-200 bg-rose-50 text-rose-700",
+                        signal.tone === "amber" && "border-amber-200 bg-amber-50 text-amber-700",
+                        signal.tone === "emerald" && "border-emerald-200 bg-emerald-50 text-emerald-700",
+                        signal.tone === "sky" && "border-sky-200 bg-sky-50 text-sky-700",
+                        signal.tone === "slate" && "border-slate-200 bg-slate-50 text-slate-700",
+                      )}
+                    >
+                      {signal.tone}
+                    </Badge>
+                  </div>
+                  <p className="mt-3 text-sm leading-6 text-slate-600">{signal.detail}</p>
                 </div>
               ))}
             </CardContent>
