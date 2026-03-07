@@ -1884,79 +1884,6 @@ export function OrchestraBoard() {
                     </label>
                   </div>
 
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
-                    <div className="mb-3 text-xs uppercase tracking-[0.18em] text-slate-500">
-                      {locale === "zh" ? "任务位置" : "Task Position"}
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      <Button variant="outline" size="sm" className="rounded-full border-slate-200 bg-white" onClick={() => handleMoveSelectedTask("up")}>
-                        {locale === "zh" ? "上移" : "Move Up"}
-                      </Button>
-                      <Button variant="outline" size="sm" className="rounded-full border-slate-200 bg-white" onClick={() => handleMoveSelectedTask("down")}>
-                        {locale === "zh" ? "下移" : "Move Down"}
-                      </Button>
-                      <Button variant="outline" size="sm" className="rounded-full border-slate-200 bg-white" onClick={() => handleMoveSelectedTask("left")}>
-                        {locale === "zh" ? "移到上一列" : "Move Left"}
-                      </Button>
-                      <Button variant="outline" size="sm" className="rounded-full border-slate-200 bg-white" onClick={() => handleMoveSelectedTask("right")}>
-                        {locale === "zh" ? "移到下一列" : "Move Right"}
-                      </Button>
-                    </div>
-                  </div>
-
-                  <label className="grid gap-2 text-sm">
-                    <span className="font-medium text-slate-700">{locale === "zh" ? "验收标准" : "Acceptance Criteria"}</span>
-                    <Textarea
-                      value={selectedTask.acceptance.join("\n")}
-                      onChange={(event) => handleTaskContentChange({ acceptance: parseAcceptance(event.target.value) })}
-                      className="min-h-28"
-                    />
-                    <span className="text-xs text-slate-500">
-                      {locale === "zh" ? "每行一条验收标准。" : "Use one acceptance criterion per line."}
-                    </span>
-                  </label>
-
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
-                    <div className="mb-3 flex items-center justify-between gap-3">
-                      <div className="text-xs uppercase tracking-[0.18em] text-slate-500">
-                        {locale === "zh" ? "依赖编辑" : "Dependencies Editor"}
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="rounded-full text-rose-600 hover:bg-rose-50 hover:text-rose-700"
-                        onClick={handleDeleteTask}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                        {locale === "zh" ? "删除任务" : "Delete Task"}
-                      </Button>
-                    </div>
-                    <div className="grid gap-2">
-                      {board.tasks.filter((task) => task.id !== selectedTask.id).length ? (
-                        board.tasks
-                          .filter((task) => task.id !== selectedTask.id)
-                          .map((task) => (
-                            <label key={task.id} className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700">
-                              <input
-                                type="checkbox"
-                                checked={selectedTask.dependsOn.includes(task.id)}
-                                onChange={() => handleDependencyToggle(task.id)}
-                                className="h-4 w-4 rounded border-slate-300"
-                              />
-                              <span className="flex-1">{translateTask(task, locale).title}</span>
-                              <Badge variant="outline" className="rounded-full border-slate-300 text-slate-500">
-                                {laneLabels[locale][task.lane]}
-                              </Badge>
-                            </label>
-                          ))
-                      ) : (
-                        <div className="rounded-xl border border-dashed border-slate-300 bg-white px-3 py-3 text-sm text-slate-500">
-                          {locale === "zh" ? "当前没有其他任务可作为依赖。" : "There are no other tasks available as dependencies."}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
                   <div className="grid gap-3 lg:grid-cols-2">
                     <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
                       <div className="text-xs uppercase tracking-[0.18em] text-slate-500">{locale === "zh" ? "依赖" : "Dependencies"}</div>
@@ -1975,82 +1902,178 @@ export function OrchestraBoard() {
                     </div>
                   </div>
 
-                  <div className="rounded-2xl border border-slate-200 bg-white p-4">
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="text-xs uppercase tracking-[0.18em] text-slate-500">
-                        {locale === "zh" ? "任务评论" : "Task Comments"}
-                      </div>
-                      <Badge variant="outline" className="rounded-full border-slate-300 text-slate-600">
-                        {selectedTask.comments.length} {locale === "zh" ? "条" : "comments"}
-                      </Badge>
-                    </div>
-                    <div className="mt-4 grid gap-3">
-                      <div className="grid gap-3 md:grid-cols-[180px_1fr_auto]">
-                        <select
-                          value={newCommentAuthor}
-                          onChange={(event) => setNewCommentAuthor(event.target.value as OrchestraExecutor)}
-                          className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm outline-none focus:border-slate-300"
-                        >
-                          {(["planner", "commander", "codex", "claude_code", "portfolio", "human"] as OrchestraExecutor[]).map((owner) => (
-                            <option key={owner} value={owner}>
-                              {ownerLabel(owner, locale)}
-                            </option>
-                          ))}
-                        </select>
-                        <Textarea
-                          value={newCommentBody}
-                          onChange={(event) => setNewCommentBody(event.target.value)}
-                          className="min-h-20"
-                          placeholder={locale === "zh" ? "写一条关于当前任务的评论、决定或提醒。" : "Write a comment, decision, or reminder for this task."}
-                        />
-                        <Button onClick={handleAddComment} className="rounded-full bg-slate-950 px-5 text-white shadow-sm hover:bg-slate-800">
-                          {locale === "zh" ? "添加评论" : "Add Comment"}
-                        </Button>
-                      </div>
-                      {selectedTask.comments.length ? (
-                        <div className="space-y-3">
-                          {selectedTask.comments
-                            .slice()
-                            .reverse()
-                            .map((comment) => (
-                              <div key={comment.id} className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
-                                <div className="flex items-center justify-between gap-3">
-                                  <div className="text-sm font-medium text-slate-900">{ownerLabel(comment.author, locale)}</div>
-                                  <div className="text-xs text-slate-500">{new Date(comment.createdAt).toLocaleString()}</div>
-                                </div>
-                                <p className="mt-2 text-sm leading-6 text-slate-600">{comment.body}</p>
-                              </div>
-                            ))}
+                  <details className="group rounded-2xl border border-slate-200 bg-white">
+                    <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-medium text-slate-900">
+                      <span>{locale === "zh" ? "深入编辑" : "Advanced Editing"}</span>
+                      <span className="text-xs text-slate-500 group-open:hidden">{locale === "zh" ? "展开" : "Expand"}</span>
+                      <span className="hidden text-xs text-slate-500 group-open:inline">{locale === "zh" ? "收起" : "Collapse"}</span>
+                    </summary>
+                    <div className="grid gap-4 border-t border-slate-200 p-4">
+                      <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
+                        <div className="mb-3 text-xs uppercase tracking-[0.18em] text-slate-500">
+                          {locale === "zh" ? "任务位置" : "Task Position"}
                         </div>
-                      ) : (
-                        <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-600">
-                          {locale === "zh" ? "这个任务还没有评论。" : "No comments on this task yet."}
+                        <div className="flex flex-wrap gap-2">
+                          <Button variant="outline" size="sm" className="rounded-full border-slate-200 bg-white" onClick={() => handleMoveSelectedTask("up")}>
+                            {locale === "zh" ? "上移" : "Move Up"}
+                          </Button>
+                          <Button variant="outline" size="sm" className="rounded-full border-slate-200 bg-white" onClick={() => handleMoveSelectedTask("down")}>
+                            {locale === "zh" ? "下移" : "Move Down"}
+                          </Button>
+                          <Button variant="outline" size="sm" className="rounded-full border-slate-200 bg-white" onClick={() => handleMoveSelectedTask("left")}>
+                            {locale === "zh" ? "移到上一列" : "Move Left"}
+                          </Button>
+                          <Button variant="outline" size="sm" className="rounded-full border-slate-200 bg-white" onClick={() => handleMoveSelectedTask("right")}>
+                            {locale === "zh" ? "移到下一列" : "Move Right"}
+                          </Button>
                         </div>
-                      )}
-                    </div>
-                  </div>
+                      </div>
 
-                  <div className="rounded-2xl border border-slate-200 bg-white p-4">
-                    <div className="text-xs uppercase tracking-[0.18em] text-slate-500">{locale === "zh" ? "任务时间线" : "Task Timeline"}</div>
-                    <div className="mt-4 space-y-3">
-                      {selectedTimeline.length ? selectedTimeline.map((event) => (
-                        <div key={event.id} className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
-                          <div className="flex items-center justify-between gap-3">
-                            <div>
-                              <div className="text-sm font-medium text-slate-900">{event.title}</div>
-                              <p className="mt-1 text-xs text-slate-500">{new Date(event.createdAt).toLocaleString()} · {timelineLabel(event.eventType, locale)}</p>
-                            </div>
-                            <Badge variant="outline" className="rounded-full border-slate-300 text-slate-600">{timelineLabel(event.eventType, locale)}</Badge>
+                      <label className="grid gap-2 text-sm">
+                        <span className="font-medium text-slate-700">{locale === "zh" ? "验收标准" : "Acceptance Criteria"}</span>
+                        <Textarea
+                          value={selectedTask.acceptance.join("\n")}
+                          onChange={(event) => handleTaskContentChange({ acceptance: parseAcceptance(event.target.value) })}
+                          className="min-h-28"
+                        />
+                        <span className="text-xs text-slate-500">
+                          {locale === "zh" ? "每行一条验收标准。" : "Use one acceptance criterion per line."}
+                        </span>
+                      </label>
+
+                      <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
+                        <div className="mb-3 flex items-center justify-between gap-3">
+                          <div className="text-xs uppercase tracking-[0.18em] text-slate-500">
+                            {locale === "zh" ? "依赖编辑" : "Dependencies Editor"}
                           </div>
-                          <p className="mt-3 text-sm leading-6 text-slate-600">{event.detail}</p>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="rounded-full text-rose-600 hover:bg-rose-50 hover:text-rose-700"
+                            onClick={handleDeleteTask}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                            {locale === "zh" ? "删除任务" : "Delete Task"}
+                          </Button>
                         </div>
-                      )) : (
-                        <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-600">
-                          {locale === "zh" ? "这个任务还没有时间线事件。" : "No timeline events for this task yet."}
+                        <div className="grid gap-2">
+                          {board.tasks.filter((task) => task.id !== selectedTask.id).length ? (
+                            board.tasks
+                              .filter((task) => task.id !== selectedTask.id)
+                              .map((task) => (
+                                <label key={task.id} className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700">
+                                  <input
+                                    type="checkbox"
+                                    checked={selectedTask.dependsOn.includes(task.id)}
+                                    onChange={() => handleDependencyToggle(task.id)}
+                                    className="h-4 w-4 rounded border-slate-300"
+                                  />
+                                  <span className="flex-1">{translateTask(task, locale).title}</span>
+                                  <Badge variant="outline" className="rounded-full border-slate-300 text-slate-500">
+                                    {laneLabels[locale][task.lane]}
+                                  </Badge>
+                                </label>
+                              ))
+                          ) : (
+                            <div className="rounded-xl border border-dashed border-slate-300 bg-white px-3 py-3 text-sm text-slate-500">
+                              {locale === "zh" ? "当前没有其他任务可作为依赖。" : "There are no other tasks available as dependencies."}
+                            </div>
+                          )}
                         </div>
-                      )}
+                      </div>
                     </div>
-                  </div>
+                  </details>
+
+                  <details className="group rounded-2xl border border-slate-200 bg-white">
+                    <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-medium text-slate-900">
+                      <span>{locale === "zh" ? "评论与时间线" : "Comments and Timeline"}</span>
+                      <div className="flex items-center gap-2">
+                        <Badge variant="outline" className="rounded-full border-slate-300 text-slate-600">
+                          {selectedTask.comments.length} {locale === "zh" ? "评论" : "comments"}
+                        </Badge>
+                        <span className="text-xs text-slate-500 group-open:hidden">{locale === "zh" ? "展开" : "Expand"}</span>
+                        <span className="hidden text-xs text-slate-500 group-open:inline">{locale === "zh" ? "收起" : "Collapse"}</span>
+                      </div>
+                    </summary>
+                    <div className="grid gap-4 border-t border-slate-200 p-4">
+                      <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="text-xs uppercase tracking-[0.18em] text-slate-500">
+                            {locale === "zh" ? "任务评论" : "Task Comments"}
+                          </div>
+                          <Badge variant="outline" className="rounded-full border-slate-300 text-slate-600">
+                            {selectedTask.comments.length} {locale === "zh" ? "条" : "comments"}
+                          </Badge>
+                        </div>
+                        <div className="mt-4 grid gap-3">
+                          <div className="grid gap-3 md:grid-cols-[180px_1fr_auto]">
+                            <select
+                              value={newCommentAuthor}
+                              onChange={(event) => setNewCommentAuthor(event.target.value as OrchestraExecutor)}
+                              className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm outline-none focus:border-slate-300"
+                            >
+                              {(["planner", "commander", "codex", "claude_code", "portfolio", "human"] as OrchestraExecutor[]).map((owner) => (
+                                <option key={owner} value={owner}>
+                                  {ownerLabel(owner, locale)}
+                                </option>
+                              ))}
+                            </select>
+                            <Textarea
+                              value={newCommentBody}
+                              onChange={(event) => setNewCommentBody(event.target.value)}
+                              className="min-h-20"
+                              placeholder={locale === "zh" ? "写一条关于当前任务的评论、决定或提醒。" : "Write a comment, decision, or reminder for this task."}
+                            />
+                            <Button onClick={handleAddComment} className="rounded-full bg-slate-950 px-5 text-white shadow-sm hover:bg-slate-800">
+                              {locale === "zh" ? "添加评论" : "Add Comment"}
+                            </Button>
+                          </div>
+                          {selectedTask.comments.length ? (
+                            <div className="space-y-3">
+                              {selectedTask.comments
+                                .slice()
+                                .reverse()
+                                .map((comment) => (
+                                  <div key={comment.id} className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
+                                    <div className="flex items-center justify-between gap-3">
+                                      <div className="text-sm font-medium text-slate-900">{ownerLabel(comment.author, locale)}</div>
+                                      <div className="text-xs text-slate-500">{new Date(comment.createdAt).toLocaleString()}</div>
+                                    </div>
+                                    <p className="mt-2 text-sm leading-6 text-slate-600">{comment.body}</p>
+                                  </div>
+                                ))}
+                            </div>
+                          ) : (
+                            <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-600">
+                              {locale === "zh" ? "这个任务还没有评论。" : "No comments on this task yet."}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                        <div className="text-xs uppercase tracking-[0.18em] text-slate-500">{locale === "zh" ? "任务时间线" : "Task Timeline"}</div>
+                        <div className="mt-4 space-y-3">
+                          {selectedTimeline.length ? selectedTimeline.map((event) => (
+                            <div key={event.id} className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
+                              <div className="flex items-center justify-between gap-3">
+                                <div>
+                                  <div className="text-sm font-medium text-slate-900">{event.title}</div>
+                                  <p className="mt-1 text-xs text-slate-500">{new Date(event.createdAt).toLocaleString()} · {timelineLabel(event.eventType, locale)}</p>
+                                </div>
+                                <Badge variant="outline" className="rounded-full border-slate-300 text-slate-600">{timelineLabel(event.eventType, locale)}</Badge>
+                              </div>
+                              <p className="mt-3 text-sm leading-6 text-slate-600">{event.detail}</p>
+                            </div>
+                          )) : (
+                            <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-600">
+                              {locale === "zh" ? "这个任务还没有时间线事件。" : "No timeline events for this task yet."}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </details>
                 </>
               ) : null}
             </CardContent>
@@ -2233,110 +2256,6 @@ export function OrchestraBoard() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="rounded-2xl border border-slate-200 bg-white p-4">
-                <div className="grid gap-3 md:grid-cols-[220px_1fr] md:items-center">
-                  <label className="grid gap-2 text-sm">
-                    <span className="font-medium text-slate-700">{locale === "zh" ? "执行模式" : "Execution Mode"}</span>
-                    <select
-                      value={adapterMode}
-                      onChange={(event) => setAdapterMode(event.target.value as ExecutorAdapterMode)}
-                      className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm outline-none focus:border-slate-300"
-                    >
-                      {executorAdapters.map((adapter) => (
-                        <option key={adapter.id} value={adapter.id}>
-                          {adapter.name}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
-                    <div className="text-sm font-medium text-slate-900">{selectedAdapter.name}</div>
-                    <p className="mt-2 text-sm leading-6 text-slate-600">{selectedAdapter.description}</p>
-                  </div>
-                </div>
-              </div>
-              <div className="rounded-2xl border border-slate-200 bg-white p-4">
-                <div className="grid gap-4 lg:grid-cols-2">
-                  <label className="grid gap-2 text-sm">
-                    <span className="font-medium text-slate-700">{locale === "zh" ? "Codex 命令模板" : "Codex Command Template"}</span>
-                    <Input
-                      value={commandTemplates.codex}
-                      onChange={(event) => setCommandTemplates((current) => ({ ...current, codex: event.target.value }))}
-                    />
-                  </label>
-                  <label className="grid gap-2 text-sm">
-                    <span className="font-medium text-slate-700">{locale === "zh" ? "Claude Code 命令模板" : "Claude Code Command Template"}</span>
-                    <Input
-                      value={commandTemplates.claude_code}
-                      onChange={(event) => setCommandTemplates((current) => ({ ...current, claude_code: event.target.value }))}
-                    />
-                  </label>
-                </div>
-                <p className="mt-3 text-xs text-slate-500">
-                  {locale === "zh"
-                    ? "支持变量：{title}、{summary}、{owner}。"
-                    : "Supported variables: {title}, {summary}, {owner}."}
-                </p>
-              </div>
-              <div className="rounded-2xl border border-slate-200 bg-white p-4">
-                <div className="grid gap-3 md:grid-cols-[220px_1fr] md:items-center">
-                  <label className="grid gap-2 text-sm">
-                    <span className="font-medium text-slate-700">{locale === "zh" ? "运行档位" : "Execution Stage"}</span>
-                    <select
-                      value={executionStage}
-                      onChange={(event) => setExecutionStage(event.target.value as ExecutionStage)}
-                      className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm outline-none focus:border-slate-300"
-                    >
-                      {(["preview", "armed", "live"] as ExecutionStage[]).map((stage) => (
-                        <option key={stage} value={stage}>
-                          {executionStageLabel[locale][stage]}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
-                    <div className="text-sm font-medium text-slate-900">{executionStageLabel[locale][executionStage]}</div>
-                    <p className="mt-2 text-sm leading-6 text-slate-600">
-                      {executionStage === "preview"
-                        ? (locale === "zh"
-                          ? "仅生成 handoff 和命令，不做任何外部执行。"
-                          : "Only generates handoffs and commands, with no external execution.")
-                        : executionStage === "armed"
-                          ? (locale === "zh"
-                            ? "进入接近真实执行的状态，但仍然不会真正调用 CLI。"
-                            : "Moves closer to live execution, but still does not invoke CLIs.")
-                          : (locale === "zh"
-                            ? "这是未来真实执行的占位模式，当前开源版仍会保持安全模式。"
-                            : "This is a placeholder for future live execution; the open-source demo remains safe.")}
-                    </p>
-                  </div>
-                </div>
-              </div>
-              <div className="rounded-2xl border border-slate-200 bg-white p-4">
-                <div className="text-xs uppercase tracking-[0.18em] text-slate-500">
-                  {locale === "zh" ? "环境前置检查" : "Environment Checks"}
-                </div>
-                <div className="mt-4 space-y-3">
-                  {environmentChecks.map((check) => (
-                    <div key={check.id} className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
-                      <div className="flex items-center justify-between gap-3">
-                        <div className="text-sm font-medium text-slate-900">{check.label}</div>
-                        <Badge
-                          className={cn(
-                            "rounded-full border",
-                            check.ok
-                              ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                              : "border-amber-200 bg-amber-50 text-amber-700",
-                          )}
-                        >
-                          {check.ok ? (locale === "zh" ? "通过" : "OK") : (locale === "zh" ? "待配置" : "Pending")}
-                        </Badge>
-                      </div>
-                      <p className="mt-2 text-sm leading-6 text-slate-600">{check.detail}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
               <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
                 <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                   <div>
@@ -2382,6 +2301,124 @@ export function OrchestraBoard() {
                   </div>
                 ) : null}
               </div>
+              <details className="group rounded-2xl border border-slate-200 bg-white">
+                <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-medium text-slate-900">
+                  <span>{locale === "zh" ? "执行设置" : "Execution Settings"}</span>
+                  <div className="flex items-center gap-2">
+                    <Badge variant="outline" className="rounded-full border-slate-300 text-slate-600">
+                      {selectedAdapter.name}
+                    </Badge>
+                    <span className="text-xs text-slate-500 group-open:hidden">{locale === "zh" ? "展开" : "Expand"}</span>
+                    <span className="hidden text-xs text-slate-500 group-open:inline">{locale === "zh" ? "收起" : "Collapse"}</span>
+                  </div>
+                </summary>
+                <div className="grid gap-4 border-t border-slate-200 p-4">
+                  <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                    <div className="grid gap-3 md:grid-cols-[220px_1fr] md:items-center">
+                      <label className="grid gap-2 text-sm">
+                        <span className="font-medium text-slate-700">{locale === "zh" ? "执行模式" : "Execution Mode"}</span>
+                        <select
+                          value={adapterMode}
+                          onChange={(event) => setAdapterMode(event.target.value as ExecutorAdapterMode)}
+                          className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm outline-none focus:border-slate-300"
+                        >
+                          {executorAdapters.map((adapter) => (
+                            <option key={adapter.id} value={adapter.id}>
+                              {adapter.name}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
+                        <div className="text-sm font-medium text-slate-900">{selectedAdapter.name}</div>
+                        <p className="mt-2 text-sm leading-6 text-slate-600">{selectedAdapter.description}</p>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                    <div className="grid gap-4 lg:grid-cols-2">
+                      <label className="grid gap-2 text-sm">
+                        <span className="font-medium text-slate-700">{locale === "zh" ? "Codex 命令模板" : "Codex Command Template"}</span>
+                        <Input
+                          value={commandTemplates.codex}
+                          onChange={(event) => setCommandTemplates((current) => ({ ...current, codex: event.target.value }))}
+                        />
+                      </label>
+                      <label className="grid gap-2 text-sm">
+                        <span className="font-medium text-slate-700">{locale === "zh" ? "Claude Code 命令模板" : "Claude Code Command Template"}</span>
+                        <Input
+                          value={commandTemplates.claude_code}
+                          onChange={(event) => setCommandTemplates((current) => ({ ...current, claude_code: event.target.value }))}
+                        />
+                      </label>
+                    </div>
+                    <p className="mt-3 text-xs text-slate-500">
+                      {locale === "zh"
+                        ? "支持变量：{title}、{summary}、{owner}。"
+                        : "Supported variables: {title}, {summary}, {owner}."}
+                    </p>
+                  </div>
+                  <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                    <div className="grid gap-3 md:grid-cols-[220px_1fr] md:items-center">
+                      <label className="grid gap-2 text-sm">
+                        <span className="font-medium text-slate-700">{locale === "zh" ? "运行档位" : "Execution Stage"}</span>
+                        <select
+                          value={executionStage}
+                          onChange={(event) => setExecutionStage(event.target.value as ExecutionStage)}
+                          className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm outline-none focus:border-slate-300"
+                        >
+                          {(["preview", "armed", "live"] as ExecutionStage[]).map((stage) => (
+                            <option key={stage} value={stage}>
+                              {executionStageLabel[locale][stage]}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
+                        <div className="text-sm font-medium text-slate-900">{executionStageLabel[locale][executionStage]}</div>
+                        <p className="mt-2 text-sm leading-6 text-slate-600">
+                          {executionStage === "preview"
+                            ? (locale === "zh"
+                              ? "仅生成 handoff 和命令，不做任何外部执行。"
+                              : "Only generates handoffs and commands, with no external execution.")
+                            : executionStage === "armed"
+                              ? (locale === "zh"
+                                ? "进入接近真实执行的状态，但仍然不会真正调用 CLI。"
+                                : "Moves closer to live execution, but still does not invoke CLIs.")
+                              : (locale === "zh"
+                                ? "这是未来真实执行的占位模式，当前开源版仍会保持安全模式。"
+                                : "This is a placeholder for future live execution; the open-source demo remains safe.")}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                    <div className="text-xs uppercase tracking-[0.18em] text-slate-500">
+                      {locale === "zh" ? "环境前置检查" : "Environment Checks"}
+                    </div>
+                    <div className="mt-4 space-y-3">
+                      {environmentChecks.map((check) => (
+                        <div key={check.id} className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="text-sm font-medium text-slate-900">{check.label}</div>
+                            <Badge
+                              className={cn(
+                                "rounded-full border",
+                                check.ok
+                                  ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                                  : "border-amber-200 bg-amber-50 text-amber-700",
+                              )}
+                            >
+                              {check.ok ? (locale === "zh" ? "通过" : "OK") : (locale === "zh" ? "待配置" : "Pending")}
+                            </Badge>
+                          </div>
+                          <p className="mt-2 text-sm leading-6 text-slate-600">{check.detail}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </details>
               {packet ? (
                 <>
                   <div className="rounded-2xl border border-slate-200 bg-[linear-gradient(180deg,_#ffffff_0%,_#fbfdff_100%)] p-4">
