@@ -12,6 +12,7 @@ import {
   Flag,
   GitPullRequestArrow,
   Lightbulb,
+  GripVertical,
   Plus,
   Sparkles,
   Trash2,
@@ -360,6 +361,10 @@ function buildDemoResult(packet: CommandPacket): DemoResult {
   };
 }
 
+function buildBatchCommand(packetList: CommandPacket[]): string {
+  return packetList.map((packet) => packet.suggestedCommand).join("\n");
+}
+
 function buildRunRecord(taskId: string, result: DemoResult): OrchestraRunRecord {
   return {
     id: `${taskId}-${Date.now()}`,
@@ -414,6 +419,38 @@ function updateTask(board: OrchestraBoard, taskId: string, updates: Partial<Orch
   };
 }
 
+function moveTask(board: OrchestraBoard, taskId: string, targetLane: OrchestraTask["lane"], targetIndex?: number): OrchestraBoard {
+  const tasks = [...board.tasks];
+  const sourceIndex = tasks.findIndex((task) => task.id === taskId);
+  if (sourceIndex === -1) {
+    return board;
+  }
+
+  const [task] = tasks.splice(sourceIndex, 1);
+  const nextTask = { ...task, lane: targetLane };
+
+  const laneIndexes = tasks
+    .map((candidate, index) => ({ candidate, index }))
+    .filter(({ candidate }) => candidate.lane === targetLane)
+    .map(({ index }) => index);
+
+  if (laneIndexes.length === 0) {
+    const insertAfter = tasks.map((candidate) => candidate.lane).lastIndexOf(targetLane);
+    if (insertAfter === -1) {
+      tasks.push(nextTask);
+    } else {
+      tasks.splice(insertAfter + 1, 0, nextTask);
+    }
+    return { ...board, tasks };
+  }
+
+  const safeIndex = targetIndex == null ? laneIndexes.length : Math.max(0, Math.min(targetIndex, laneIndexes.length));
+  const insertAt = safeIndex >= laneIndexes.length ? laneIndexes[laneIndexes.length - 1] + 1 : laneIndexes[safeIndex];
+  tasks.splice(insertAt, 0, nextTask);
+
+  return { ...board, tasks };
+}
+
 function createTaskId(title: string): string {
   return `task-${title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 24) || Date.now()}`;
 }
@@ -440,6 +477,8 @@ export function OrchestraBoard() {
   const [timeline, setTimeline] = useState<OrchestraTimelineEvent[]>([]);
   const [expandedRunId, setExpandedRunId] = useState<string | null>(null);
   const [selectedScenarioId, setSelectedScenarioId] = useState<string>(orchestraScenarios[0]?.id ?? "");
+  const [selectedCommandTaskIds, setSelectedCommandTaskIds] = useState<string[]>([]);
+  const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
   const [newTaskTitle, setNewTaskTitle] = useState("");
   const [newTaskSummary, setNewTaskSummary] = useState("");
   const [newTaskLane, setNewTaskLane] = useState<OrchestraTask["lane"]>("execution");
@@ -456,6 +495,14 @@ export function OrchestraBoard() {
     [board.tasks, selectedTaskId],
   );
   const selectedTimeline = timeline.filter((event) => event.taskId === selectedTaskId);
+  const commandTasks = useMemo(
+    () => board.tasks.filter((task) => selectedCommandTaskIds.includes(task.id)),
+    [board.tasks, selectedCommandTaskIds],
+  );
+  const commandPackets = useMemo(
+    () => commandTasks.map((task) => buildCommandPacket(board.feature, task, task.owner)),
+    [board.feature, commandTasks],
+  );
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
@@ -475,12 +522,14 @@ export function OrchestraBoard() {
           selectedTaskId: string;
           runHistory: OrchestraRunRecord[];
           timeline: OrchestraTimelineEvent[];
+          selectedCommandTaskIds?: string[];
         };
 
         setBoard(parsed.board);
         setSelectedTaskId(parsed.selectedTaskId || parsed.board.tasks[0]?.id || "");
         setRunHistory(parsed.runHistory ?? []);
         setTimeline(parsed.timeline ?? []);
+        setSelectedCommandTaskIds(parsed.selectedCommandTaskIds ?? []);
         setTitle(parsed.board.feature.title);
         setProblem(parsed.board.feature.problem);
         setGoals(parsed.board.feature.goals.join("\n"));
@@ -506,9 +555,10 @@ export function OrchestraBoard() {
         selectedTaskId,
         runHistory,
         timeline,
+        selectedCommandTaskIds,
       }),
     );
-  }, [board, selectedTaskId, runHistory, timeline]);
+  }, [board, selectedTaskId, runHistory, timeline, selectedCommandTaskIds]);
 
   function handleGeneratePlan() {
     const idea: OrchestraFeatureIdea = {
@@ -527,6 +577,7 @@ export function OrchestraBoard() {
     setRunResult(null);
     setRunHistory([]);
     setTimeline([]);
+    setSelectedCommandTaskIds([]);
   }
 
   function applyScenario(scenario: OrchestraScenario) {
@@ -543,6 +594,7 @@ export function OrchestraBoard() {
     setRunResult(null);
     setRunHistory([]);
     setTimeline([]);
+    setSelectedCommandTaskIds([]);
   }
 
   function resetDemo() {
@@ -558,29 +610,52 @@ export function OrchestraBoard() {
     setRunHistory([]);
     setTimeline([]);
     setSelectedScenarioId(orchestraScenarios[0]?.id ?? "");
+    setSelectedCommandTaskIds([]);
   }
 
   function handleGenerateHandoff(task: OrchestraTask) {
     setSelectedTaskId(task.id);
     setPacket(buildCommandPacket(board.feature, task, task.owner));
+    setSelectedCommandTaskIds([task.id]);
+    setRunResult(null);
+  }
+
+  function handleGenerateBatchHandoff() {
+    if (!commandTasks.length) {
+      return;
+    }
+
+    setSelectedTaskId(commandTasks[0]?.id ?? "");
+    setPacket(commandPackets[0] ?? null);
     setRunResult(null);
   }
 
   function handleRunPacket() {
-    if (!packet || !selectedTask) {
+    if (!commandPackets.length) {
       return;
     }
 
-    const result = buildDemoResult(packet);
-    const record = buildRunRecord(selectedTask.id, result);
-    const nextTimeline = buildTimeline(selectedTask.id, record.id, locale);
+    const results = commandPackets.map((packet) => ({
+      packet,
+      task: commandTasks.find((task) => task.id === packet.title || task.title === packet.title) ?? board.tasks.find((task) => task.title === packet.title),
+      result: buildDemoResult(packet),
+    }));
+    const validResults = results.filter((item): item is typeof item & { task: OrchestraTask } => Boolean(item.task));
+    if (!validResults.length) {
+      return;
+    }
 
-    setRunResult(result);
-    setRunHistory((current) => [record, ...current].slice(0, 20));
+    const records = validResults.map(({ task, result }) => buildRunRecord(task.id, result));
+    const nextTimeline = validResults.flatMap(({ task }, index) => buildTimeline(task.id, records[index].id, locale));
+
+    setRunResult(validResults[validResults.length - 1]?.result ?? null);
+    setRunHistory((current) => [...records.reverse(), ...current].slice(0, 20));
     setTimeline((current) => [...nextTimeline.reverse(), ...current].slice(0, 80));
     setBoard((current) => ({
       ...current,
-      tasks: current.tasks.map((task) => (task.id === selectedTask.id ? updateTaskState(task) : task)),
+      tasks: current.tasks.map((task) => (
+        selectedCommandTaskIds.includes(task.id) ? updateTaskState(task) : task
+      )),
     }));
   }
 
@@ -644,6 +719,7 @@ export function OrchestraBoard() {
     setSelectedTaskId(task.id);
     setPacket(null);
     setRunResult(null);
+    setSelectedCommandTaskIds((current) => [...new Set([...current, task.id])]);
     setNewTaskTitle("");
     setNewTaskSummary("");
     setNewTaskLane("execution");
@@ -670,9 +746,53 @@ export function OrchestraBoard() {
     setTimeline((current) => current.filter((event) => event.taskId !== selectedTask.id));
     setRunHistory((current) => current.filter((run) => run.taskId !== selectedTask.id));
     setSelectedTaskId(nextSelectedId);
+    setSelectedCommandTaskIds((current) => current.filter((id) => id !== selectedTask.id));
     setPacket(null);
     setRunResult(null);
     setExpandedRunId(null);
+  }
+
+  function handleTaskSelection(taskId: string, checked: boolean) {
+    setSelectedCommandTaskIds((current) => (
+      checked ? [...new Set([...current, taskId])] : current.filter((id) => id !== taskId)
+    ));
+  }
+
+  function handleTaskDrop(targetLane: OrchestraTask["lane"], targetIndex?: number) {
+    if (!draggedTaskId) {
+      return;
+    }
+
+    setBoard((current) => moveTask(current, draggedTaskId, targetLane, targetIndex));
+    setDraggedTaskId(null);
+  }
+
+  function handleMoveSelectedTask(direction: "up" | "down" | "left" | "right") {
+    if (!selectedTask) {
+      return;
+    }
+
+    if (direction === "left" || direction === "right") {
+      const currentLaneIndex = laneOrder.indexOf(selectedTask.lane);
+      const nextLaneIndex = direction === "left" ? currentLaneIndex - 1 : currentLaneIndex + 1;
+      const nextLane = laneOrder[nextLaneIndex];
+      if (!nextLane) {
+        return;
+      }
+      setBoard((current) => moveTask(current, selectedTask.id, nextLane));
+      return;
+    }
+
+    const laneTasks = board.tasks.filter((task) => task.lane === selectedTask.lane);
+    const currentIndex = laneTasks.findIndex((task) => task.id === selectedTask.id);
+    if (currentIndex === -1) {
+      return;
+    }
+    const nextIndex = direction === "up" ? currentIndex - 1 : currentIndex + 1;
+    if (nextIndex < 0 || nextIndex >= laneTasks.length) {
+      return;
+    }
+    setBoard((current) => moveTask(current, selectedTask.id, selectedTask.lane, nextIndex));
   }
 
   return (
@@ -901,21 +1021,51 @@ export function OrchestraBoard() {
                     {laneLabels[locale][lane]}
                   </Badge>
                 </div>
-                <div className="space-y-3">
-                  {tasks.map((task) => {
+                <div
+                  className="space-y-3"
+                  onDragOver={(event) => event.preventDefault()}
+                  onDrop={() => handleTaskDrop(lane, tasks.length)}
+                >
+                  {tasks.map((task, index) => {
                     const translatedTask = translateTask(task, locale);
                     return (
                       <div
                         key={task.id}
+                        draggable
+                        onDragStart={() => setDraggedTaskId(task.id)}
+                        onDragEnd={() => setDraggedTaskId(null)}
+                        onDragOver={(event) => event.preventDefault()}
+                        onDrop={(event) => {
+                          event.preventDefault();
+                          handleTaskDrop(lane, index);
+                        }}
                         className={cn(
                           "rounded-2xl border border-slate-200 bg-[linear-gradient(180deg,_#ffffff_0%,_#fbfdff_100%)] p-4 shadow-[0_12px_30px_-24px_rgba(15,23,42,0.45)] transition-all",
                           selectedTaskId === task.id && "border-slate-300 ring-2 ring-slate-950/10",
+                          draggedTaskId === task.id && "opacity-60",
                         )}
                       >
                         <div className="flex items-start justify-between gap-3">
-                          <div>
+                          <div className="flex items-start gap-3">
+                            <button
+                              type="button"
+                              className="mt-0.5 text-slate-300 transition-colors hover:text-slate-500"
+                              aria-label={locale === "zh" ? "拖拽任务" : "Drag task"}
+                            >
+                              <GripVertical className="h-4 w-4" />
+                            </button>
+                            <label className="mt-0.5">
+                              <input
+                                type="checkbox"
+                                checked={selectedCommandTaskIds.includes(task.id)}
+                                onChange={(event) => handleTaskSelection(task.id, event.target.checked)}
+                                className="h-4 w-4 rounded border-slate-300"
+                              />
+                            </label>
+                            <div>
                             <div className="text-base font-semibold text-slate-900">{translatedTask.title}</div>
                             <p className="mt-1 text-sm leading-7 text-slate-600">{translatedTask.summary}</p>
+                            </div>
                           </div>
                           <Badge className={cn("rounded-full border", stateTone[task.state])}>{statusLabel[locale][task.state]}</Badge>
                         </div>
@@ -968,7 +1118,7 @@ export function OrchestraBoard() {
                 {locale === "zh" ? "任务详情" : "Task Detail"}
               </CardTitle>
               <CardDescription>
-                {locale === "zh" ? "查看选中任务的上下文、时间线和交接信息。" : "Inspect the selected task context, timeline, and handoff."}
+                {locale === "zh" ? "查看选中任务的上下文、时间线、拖拽位置和交接信息。" : "Inspect the selected task context, ordering, timeline, and handoff."}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -1053,6 +1203,26 @@ export function OrchestraBoard() {
                         ))}
                       </select>
                     </label>
+                  </div>
+
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
+                    <div className="mb-3 text-xs uppercase tracking-[0.18em] text-slate-500">
+                      {locale === "zh" ? "任务位置" : "Task Position"}
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <Button variant="outline" size="sm" className="rounded-full border-slate-200 bg-white" onClick={() => handleMoveSelectedTask("up")}>
+                        {locale === "zh" ? "上移" : "Move Up"}
+                      </Button>
+                      <Button variant="outline" size="sm" className="rounded-full border-slate-200 bg-white" onClick={() => handleMoveSelectedTask("down")}>
+                        {locale === "zh" ? "下移" : "Move Down"}
+                      </Button>
+                      <Button variant="outline" size="sm" className="rounded-full border-slate-200 bg-white" onClick={() => handleMoveSelectedTask("left")}>
+                        {locale === "zh" ? "移到上一列" : "Move Left"}
+                      </Button>
+                      <Button variant="outline" size="sm" className="rounded-full border-slate-200 bg-white" onClick={() => handleMoveSelectedTask("right")}>
+                        {locale === "zh" ? "移到下一列" : "Move Right"}
+                      </Button>
+                    </div>
                   </div>
 
                   <label className="grid gap-2 text-sm">
@@ -1242,27 +1412,80 @@ export function OrchestraBoard() {
                 {locale === "zh" ? "Commander 控制台" : "Commander Console"}
               </CardTitle>
               <CardDescription>
-                {locale === "zh" ? "这里会生成执行 handoff，并用本地模拟模式演示 run。" : "This generates execution handoffs and demonstrates runs in local simulation mode."}
+                {locale === "zh" ? "这里会生成单任务或批量 handoff，并用本地模拟模式演示 run。" : "This generates single-task or batch handoffs and demonstrates runs in local simulation mode."}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
+              <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
+                <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                  <div>
+                    <div className="text-sm font-medium text-slate-900">
+                      {locale === "zh" ? "Execution Batch" : "Execution Batch"}
+                    </div>
+                    <p className="mt-1 text-sm text-slate-600">
+                      {locale === "zh"
+                        ? `已选择 ${commandTasks.length} 个任务用于批量交接。`
+                        : `${commandTasks.length} tasks selected for batched handoff.`}
+                    </p>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="rounded-full border-slate-200 bg-white shadow-sm"
+                    onClick={handleGenerateBatchHandoff}
+                    disabled={!commandTasks.length}
+                  >
+                    {locale === "zh" ? "生成批量交接包" : "Generate Batch Handoff"}
+                  </Button>
+                </div>
+                {commandTasks.length ? (
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {commandTasks.map((task) => (
+                      <Badge key={task.id} variant="outline" className="rounded-full border-slate-300 bg-white text-slate-700">
+                        {translateTask(task, locale).title}
+                      </Badge>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
               {packet ? (
                 <>
                   <div className="rounded-2xl border border-slate-200 bg-[linear-gradient(180deg,_#ffffff_0%,_#fbfdff_100%)] p-4">
                     <div className="flex items-center justify-between gap-3">
                       <div>
-                        <div className="text-sm font-medium text-slate-900">{packet.title}</div>
-                        <p className="mt-1 text-sm text-slate-600">{packet.reasoning}</p>
+                        <div className="text-sm font-medium text-slate-900">
+                          {commandPackets.length > 1
+                            ? locale === "zh"
+                              ? `批量交接 · ${commandPackets.length} 个任务`
+                              : `Batch handoff · ${commandPackets.length} tasks`
+                            : packet.title}
+                        </div>
+                        <p className="mt-1 text-sm text-slate-600">
+                          {commandPackets.length > 1
+                            ? locale === "zh"
+                              ? "Commander 会保留每个任务自己的执行者，但把这批任务作为一个执行批次来下发。"
+                              : "Commander preserves each task executor but issues them as one execution batch."
+                            : packet.reasoning}
+                        </p>
                       </div>
-                      <Badge className={cn("rounded-full", ownerTone[packet.executor])}>{ownerLabel(packet.executor, locale)}</Badge>
+                      <Badge className={cn("rounded-full", ownerTone[packet.executor])}>
+                        {commandPackets.length > 1 ? (locale === "zh" ? "Batch" : "Batch") : ownerLabel(packet.executor, locale)}
+                      </Badge>
                     </div>
                   </div>
 
                   <div className="rounded-2xl border border-slate-900/80 bg-slate-950 p-4 text-slate-100 shadow-[0_18px_40px_-24px_rgba(15,23,42,0.6)]">
                     <div className="flex items-center justify-between gap-3">
-                      <div className="text-xs uppercase tracking-[0.18em] text-slate-400">Suggested Command</div>
+                      <div className="text-xs uppercase tracking-[0.18em] text-slate-400">
+                        {commandPackets.length > 1 ? "Suggested Batch Commands" : "Suggested Command"}
+                      </div>
                       <div className="flex items-center gap-2">
-                        <Button variant="secondary" size="sm" className="rounded-full" onClick={() => handleCopy(packet.suggestedCommand)}>
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          className="rounded-full"
+                          onClick={() => handleCopy(commandPackets.length > 1 ? buildBatchCommand(commandPackets) : packet.suggestedCommand)}
+                        >
                           <Copy className="h-4 w-4" />
                           {locale === "zh" ? "复制" : "Copy"}
                         </Button>
@@ -1272,18 +1495,18 @@ export function OrchestraBoard() {
                         </Button>
                       </div>
                     </div>
-                    <pre className="mt-3 overflow-x-auto whitespace-pre-wrap text-sm leading-6"><code>{packet.suggestedCommand}</code></pre>
+                    <pre className="mt-3 overflow-x-auto whitespace-pre-wrap text-sm leading-6"><code>{commandPackets.length > 1 ? buildBatchCommand(commandPackets) : packet.suggestedCommand}</code></pre>
                   </div>
 
                   <div className="rounded-2xl border border-slate-200 bg-[linear-gradient(180deg,_#ffffff_0%,_#fbfdff_100%)] p-4">
                     <div className="flex items-center justify-between gap-3">
-                      <div className="text-sm font-medium text-slate-900">{locale === "zh" ? "执行 Prompt" : "Executor Prompt"}</div>
-                      <Button variant="outline" size="sm" className="rounded-full border-slate-200 bg-white shadow-sm" onClick={() => handleCopy(packet.prompt)}>
+                      <div className="text-sm font-medium text-slate-900">{commandPackets.length > 1 ? (locale === "zh" ? "批量执行 Prompt" : "Batch Executor Prompt") : (locale === "zh" ? "执行 Prompt" : "Executor Prompt")}</div>
+                      <Button variant="outline" size="sm" className="rounded-full border-slate-200 bg-white shadow-sm" onClick={() => handleCopy(commandPackets.length > 1 ? commandPackets.map((item) => item.prompt).join("\n\n---\n\n") : packet.prompt)}>
                         <Copy className="h-4 w-4" />
                         {locale === "zh" ? "复制" : "Copy"}
                       </Button>
                     </div>
-                    <pre className="mt-3 max-h-80 overflow-auto whitespace-pre-wrap text-sm leading-6 text-slate-600"><code>{packet.prompt}</code></pre>
+                    <pre className="mt-3 max-h-80 overflow-auto whitespace-pre-wrap text-sm leading-6 text-slate-600"><code>{commandPackets.length > 1 ? commandPackets.map((item) => `# ${item.title}\n${item.prompt}`).join("\n\n---\n\n") : packet.prompt}</code></pre>
                   </div>
 
                   {runResult ? (
