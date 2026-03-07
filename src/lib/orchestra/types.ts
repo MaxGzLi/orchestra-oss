@@ -104,6 +104,33 @@ export interface OrchestraPersistedState {
   timeline: OrchestraTimelineEvent[];
 }
 
+export interface OrchestraBoardSnapshot {
+  id: string;
+  name: string;
+  template: OrchestraTemplateId;
+  updatedAt: string;
+  board: OrchestraBoard;
+  selectedTaskId: string;
+  runHistory: OrchestraRunRecord[];
+  batchSummaries: Array<{
+    id: string;
+    createdAt: string;
+    strategy: string;
+    adapterMode: string;
+    total: number;
+    succeeded: number;
+    failed: number;
+    taskIds: string[];
+  }>;
+  timeline: OrchestraTimelineEvent[];
+  selectedCommandTaskIds: string[];
+}
+
+export interface OrchestraWorkspaceState {
+  activeBoardId: string;
+  boards: OrchestraBoardSnapshot[];
+}
+
 export interface OrchestraScenario {
   id: string;
   title: string;

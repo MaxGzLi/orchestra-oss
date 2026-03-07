@@ -43,11 +43,13 @@ import type {
   OrchestraTaskComment,
   OrchestraTaskPriority,
   OrchestraRunRecord,
+  OrchestraBoardSnapshot,
   OrchestraScenario,
   OrchestraTask,
   OrchestraTaskState,
   OrchestraTemplateId,
   OrchestraTimelineEvent,
+  OrchestraWorkspaceState,
 } from "@/lib/orchestra/types";
 
 type Locale = "zh" | "en";
@@ -69,6 +71,50 @@ type DemoResult = ExecutorRunResult;
 
 const LOCALE_KEY = "orchestra-oss-locale";
 const STATE_KEY = "orchestra-oss-state";
+
+function createBoardSnapshot(params: {
+  id: string;
+  name: string;
+  template: OrchestraTemplateId;
+  updatedAt?: string;
+  board: OrchestraBoard;
+  selectedTaskId: string;
+  runHistory: OrchestraRunRecord[];
+  batchSummaries: BatchRunSummary[];
+  timeline: OrchestraTimelineEvent[];
+  selectedCommandTaskIds: string[];
+}): OrchestraBoardSnapshot {
+  return {
+    id: params.id,
+    name: params.name,
+    template: params.template,
+    updatedAt: params.updatedAt ?? new Date().toISOString(),
+    board: params.board,
+    selectedTaskId: params.selectedTaskId,
+    runHistory: params.runHistory,
+    batchSummaries: params.batchSummaries,
+    timeline: params.timeline,
+    selectedCommandTaskIds: params.selectedCommandTaskIds,
+  };
+}
+
+function createWorkspaceBoardId() {
+  return `board-${Date.now().toString(36)}`;
+}
+
+function normalizeBatchSummaries(
+  summaries: OrchestraBoardSnapshot["batchSummaries"] | undefined,
+): BatchRunSummary[] {
+  return (summaries ?? []).map((summary) => ({
+    ...summary,
+    strategy: ["manual", "dependency", "owner", "priority"].includes(summary.strategy)
+      ? summary.strategy as BatchStrategy
+      : "manual",
+    adapterMode: ["simulated-local", "cli-preview", "reviewer-preview"].includes(summary.adapterMode)
+      ? summary.adapterMode as ExecutorAdapterMode
+      : "simulated-local",
+  }));
+}
 
 const localeLabel: Record<Locale, string> = {
   zh: "中文",
@@ -784,7 +830,22 @@ function matchesTaskSearch(task: OrchestraTask, query: string) {
 
 export function OrchestraBoard() {
   const defaultBoard = getDefaultOrchestraBoard();
+  const defaultBoardId = "board-default";
   const [locale, setLocale] = useState<Locale>(getInitialLocale);
+  const [activeBoardId, setActiveBoardId] = useState(defaultBoardId);
+  const [boardSnapshots, setBoardSnapshots] = useState<OrchestraBoardSnapshot[]>([
+    createBoardSnapshot({
+      id: defaultBoardId,
+      name: defaultBoard.feature.title,
+      template: orchestraScenarios[0]?.template ?? "delivery",
+      board: defaultBoard,
+      selectedTaskId: defaultBoard.tasks[0]?.id ?? "",
+      runHistory: [],
+      batchSummaries: [],
+      timeline: [],
+      selectedCommandTaskIds: [],
+    }),
+  ]);
   const [board, setBoard] = useState<OrchestraBoard>(defaultBoard);
   const [title, setTitle] = useState(board.feature.title);
   const [problem, setProblem] = useState(board.feature.problem);
@@ -824,6 +885,20 @@ export function OrchestraBoard() {
   const [newTaskLane, setNewTaskLane] = useState<OrchestraTask["lane"]>("execution");
   const [newTaskOwner, setNewTaskOwner] = useState<OrchestraExecutor>("codex");
   const [newTaskPriority, setNewTaskPriority] = useState<OrchestraTaskPriority>("medium");
+  const draftFeature = useMemo<OrchestraFeatureIdea>(() => ({
+    ...board.feature,
+    title: title.trim() || board.feature.title,
+    problem: problem.trim() || board.feature.problem,
+    goals: goals.split("\n").map((line) => line.trim()).filter(Boolean),
+    constraints: constraints.split("\n").map((line) => line.trim()).filter(Boolean),
+  }), [board.feature, constraints, goals, problem, title]);
+  const draftBoard = useMemo<OrchestraBoard>(
+    () => ({
+      ...board,
+      feature: draftFeature,
+    }),
+    [board, draftFeature],
+  );
 
   const taskCounts = useMemo(() => summarizeByOwner(board.tasks), [board.tasks]);
   const portfolioSignals = useMemo(() => buildPortfolioSignals(board, locale), [board, locale]);
@@ -983,12 +1058,12 @@ export function OrchestraBoard() {
       }
 
       try {
-        const parsed = JSON.parse(raw) as {
-          board: OrchestraBoard;
-          selectedTaskId: string;
-          runHistory: OrchestraRunRecord[];
+        const parsed = JSON.parse(raw) as OrchestraWorkspaceState & {
+          board?: OrchestraBoard;
+          selectedTaskId?: string;
+          runHistory?: OrchestraRunRecord[];
           batchSummaries?: BatchRunSummary[];
-          timeline: OrchestraTimelineEvent[];
+          timeline?: OrchestraTimelineEvent[];
           selectedCommandTaskIds?: string[];
           selectedTemplateId?: OrchestraTemplateId;
           batchStrategy?: BatchStrategy;
@@ -997,14 +1072,47 @@ export function OrchestraBoard() {
           commandTemplates?: CommandTemplateConfig;
         };
 
-        const normalizedBoard = normalizeBoard(parsed.board);
-        setBoard(normalizedBoard);
-        setSelectedTaskId(parsed.selectedTaskId || normalizedBoard.tasks[0]?.id || "");
-        setRunHistory(parsed.runHistory ?? []);
-        setBatchSummaries(parsed.batchSummaries ?? []);
-        setTimeline(parsed.timeline ?? []);
-        setSelectedCommandTaskIds(parsed.selectedCommandTaskIds ?? []);
-        setSelectedTemplateId(parsed.selectedTemplateId ?? orchestraScenarios[0]?.template ?? "delivery");
+        const parsedBoards = Array.isArray(parsed.boards) && parsed.boards.length
+          ? parsed.boards.map((snapshot) => ({
+            ...snapshot,
+            board: normalizeBoard(snapshot.board),
+            batchSummaries: normalizeBatchSummaries(snapshot.batchSummaries),
+          }))
+          : parsed.board
+            ? [createBoardSnapshot({
+              id: defaultBoardId,
+              name: parsed.board.feature.title,
+              template: parsed.selectedTemplateId ?? orchestraScenarios[0]?.template ?? "delivery",
+              board: normalizeBoard(parsed.board),
+              selectedTaskId: parsed.selectedTaskId ?? parsed.board.tasks[0]?.id ?? "",
+              runHistory: parsed.runHistory ?? [],
+              batchSummaries: parsed.batchSummaries ?? [],
+              timeline: parsed.timeline ?? [],
+              selectedCommandTaskIds: parsed.selectedCommandTaskIds ?? [],
+            })]
+            : [];
+
+        if (parsedBoards.length) {
+          const nextActiveBoardId = parsed.activeBoardId && parsedBoards.find((snapshot) => snapshot.id === parsed.activeBoardId)
+            ? parsed.activeBoardId
+            : parsedBoards[0].id;
+          const activeSnapshot = parsedBoards.find((snapshot) => snapshot.id === nextActiveBoardId) ?? parsedBoards[0];
+
+          setBoardSnapshots(parsedBoards);
+          setActiveBoardId(nextActiveBoardId);
+          setBoard(activeSnapshot.board);
+          setSelectedTaskId(activeSnapshot.selectedTaskId || activeSnapshot.board.tasks[0]?.id || "");
+          setRunHistory(activeSnapshot.runHistory ?? []);
+          setBatchSummaries(normalizeBatchSummaries(activeSnapshot.batchSummaries));
+          setTimeline(activeSnapshot.timeline ?? []);
+          setSelectedCommandTaskIds(activeSnapshot.selectedCommandTaskIds ?? []);
+          setSelectedTemplateId(activeSnapshot.template ?? orchestraScenarios[0]?.template ?? "delivery");
+          setTitle(activeSnapshot.board.feature.title);
+          setProblem(activeSnapshot.board.feature.problem);
+          setGoals(activeSnapshot.board.feature.goals.join("\n"));
+          setConstraints(activeSnapshot.board.feature.constraints.join("\n"));
+        }
+
         setBatchStrategy(parsed.batchStrategy ?? "manual");
         setAdapterMode(parsed.adapterMode ?? "simulated-local");
         setExecutionStage(parsed.executionStage ?? "preview");
@@ -1012,10 +1120,6 @@ export function OrchestraBoard() {
           codex: 'codex exec "{title}: {summary}"',
           claude_code: 'claude-code run "{title}: {summary}"',
         });
-        setTitle(normalizedBoard.feature.title);
-        setProblem(normalizedBoard.feature.problem);
-        setGoals(normalizedBoard.feature.goals.join("\n"));
-        setConstraints(normalizedBoard.feature.constraints.join("\n"));
       } catch {
         // Ignore invalid local state.
       }
@@ -1024,21 +1128,70 @@ export function OrchestraBoard() {
     return () => window.clearTimeout(timeoutId);
   }, []);
   const selectedScenario = orchestraScenarios.find((scenario) => scenario.id === selectedScenarioId) ?? orchestraScenarios[0];
+  const sortedBoardSnapshots = useMemo(
+    () => [...boardSnapshots].sort((left, right) => right.updatedAt.localeCompare(left.updatedAt)),
+    [boardSnapshots],
+  );
 
   useEffect(() => {
     window.localStorage.setItem(LOCALE_KEY, locale);
   }, [locale]);
 
   useEffect(() => {
-    window.localStorage.setItem(
-      STATE_KEY,
-      JSON.stringify({
-        board,
+    // This keeps the active workspace snapshot in sync with task edits and run history.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setBoardSnapshots((current) => {
+      const existing = current.find((snapshot) => snapshot.id === activeBoardId);
+      const nextSnapshot = createBoardSnapshot({
+        id: activeBoardId,
+        name: draftFeature.title,
+        template: selectedTemplateId,
+        updatedAt: existing?.updatedAt ?? new Date().toISOString(),
+        board: draftBoard,
         selectedTaskId,
         runHistory,
         batchSummaries,
         timeline,
         selectedCommandTaskIds,
+      });
+      const hasChanged = !existing
+        || JSON.stringify({
+          name: existing.name,
+          template: existing.template,
+          board: existing.board,
+          selectedTaskId: existing.selectedTaskId,
+          runHistory: existing.runHistory,
+          batchSummaries: existing.batchSummaries,
+          timeline: existing.timeline,
+          selectedCommandTaskIds: existing.selectedCommandTaskIds,
+        }) !== JSON.stringify({
+          name: nextSnapshot.name,
+          template: nextSnapshot.template,
+          board: nextSnapshot.board,
+          selectedTaskId: nextSnapshot.selectedTaskId,
+          runHistory: nextSnapshot.runHistory,
+          batchSummaries: nextSnapshot.batchSummaries,
+          timeline: nextSnapshot.timeline,
+          selectedCommandTaskIds: nextSnapshot.selectedCommandTaskIds,
+        });
+
+      if (!hasChanged) {
+        return current;
+      }
+
+      const updatedSnapshot = { ...nextSnapshot, updatedAt: new Date().toISOString() };
+      return current.some((snapshot) => snapshot.id === activeBoardId)
+        ? current.map((snapshot) => snapshot.id === activeBoardId ? updatedSnapshot : snapshot)
+        : [updatedSnapshot, ...current];
+    });
+  }, [activeBoardId, batchSummaries, draftBoard, draftFeature.title, runHistory, selectedCommandTaskIds, selectedTaskId, selectedTemplateId, timeline]);
+
+  useEffect(() => {
+    window.localStorage.setItem(
+      STATE_KEY,
+      JSON.stringify({
+        activeBoardId,
+        boards: boardSnapshots,
         selectedTemplateId,
         batchStrategy,
         adapterMode,
@@ -1046,7 +1199,7 @@ export function OrchestraBoard() {
         commandTemplates,
       }),
     );
-  }, [adapterMode, batchStrategy, batchSummaries, board, commandTemplates, executionStage, selectedTaskId, runHistory, selectedCommandTaskIds, selectedTemplateId, timeline]);
+  }, [activeBoardId, adapterMode, batchStrategy, boardSnapshots, commandTemplates, executionStage, selectedTemplateId]);
 
   function handleGeneratePlan() {
     const idea: OrchestraFeatureIdea = {
@@ -1113,6 +1266,64 @@ export function OrchestraBoard() {
     setBatchStrategy("manual");
     setAdapterMode("simulated-local");
     setExecutionStage("preview");
+  }
+
+  function handleSwitchBoardSnapshot(snapshotId: string) {
+    const snapshot = boardSnapshots.find((candidate) => candidate.id === snapshotId);
+    if (!snapshot) {
+      return;
+    }
+
+    setActiveBoardId(snapshot.id);
+    setBoard(snapshot.board);
+    setSelectedTaskId(snapshot.selectedTaskId || snapshot.board.tasks[0]?.id || "");
+    setRunHistory(snapshot.runHistory ?? []);
+    setBatchSummaries(normalizeBatchSummaries(snapshot.batchSummaries));
+    setTimeline(snapshot.timeline ?? []);
+    setSelectedCommandTaskIds(snapshot.selectedCommandTaskIds ?? []);
+    setSelectedTemplateId(snapshot.template);
+    setTitle(snapshot.board.feature.title);
+    setProblem(snapshot.board.feature.problem);
+    setGoals(snapshot.board.feature.goals.join("\n"));
+    setConstraints(snapshot.board.feature.constraints.join("\n"));
+    setPacket(null);
+    setRunResult(null);
+    setExpandedRunId(null);
+    setInspectorTab("task");
+  }
+
+  function handleCreateBoardSnapshot() {
+    const nextBoardId = createWorkspaceBoardId();
+    const nextBoard = {
+      ...draftBoard,
+      feature: {
+        ...draftBoard.feature,
+        id: `idea-${Date.now()}`,
+      },
+    };
+    const nextSnapshot = createBoardSnapshot({
+      id: nextBoardId,
+      name: nextBoard.feature.title,
+      template: selectedTemplateId,
+      board: nextBoard,
+      selectedTaskId: nextBoard.tasks[0]?.id ?? "",
+      runHistory: [],
+      batchSummaries: [],
+      timeline: [],
+      selectedCommandTaskIds: [],
+    });
+    setBoardSnapshots((current) => [nextSnapshot, ...current]);
+    setActiveBoardId(nextBoardId);
+    setBoard(nextBoard);
+    setSelectedTaskId(nextBoard.tasks[0]?.id ?? "");
+    setRunHistory([]);
+    setBatchSummaries([]);
+    setTimeline([]);
+    setSelectedCommandTaskIds([]);
+    setPacket(null);
+    setRunResult(null);
+    setExpandedRunId(null);
+    setInspectorTab("task");
   }
 
   function handleGenerateHandoff(task: OrchestraTask) {
@@ -1504,6 +1715,39 @@ export function OrchestraBoard() {
                   </button>
                 ))}
               </div>
+            </div>
+
+            <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+              <div className="flex min-w-0 flex-wrap items-center gap-2">
+                <span className="text-xs uppercase tracking-[0.18em] text-slate-500">
+                  {locale === "zh" ? "Boards" : "Boards"}
+                </span>
+                {sortedBoardSnapshots.map((snapshot) => (
+                  <button
+                    key={snapshot.id}
+                    type="button"
+                    onClick={() => handleSwitchBoardSnapshot(snapshot.id)}
+                    className={cn(
+                      "max-w-[220px] truncate rounded-full border px-3 py-1.5 text-sm transition-colors",
+                      snapshot.id === activeBoardId
+                        ? "border-slate-950 bg-slate-950 text-white"
+                        : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:text-slate-900",
+                    )}
+                    title={snapshot.name}
+                  >
+                    {snapshot.name}
+                  </button>
+                ))}
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                className="rounded-full border-slate-200 bg-white shadow-sm"
+                onClick={handleCreateBoardSnapshot}
+              >
+                <Plus className="h-4 w-4" />
+                {locale === "zh" ? "另存为新 Board" : "Save As New Board"}
+              </Button>
             </div>
 
             <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
