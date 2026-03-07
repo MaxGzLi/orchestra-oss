@@ -68,6 +68,14 @@ type BatchRunSummary = {
   taskIds: string[];
 };
 type DemoResult = ExecutorRunResult;
+type DispatchQueueItem = {
+  boardId: string;
+  boardName: string;
+  taskId: string;
+  title: string;
+  owner: OrchestraExecutor;
+  priority: OrchestraTaskPriority;
+};
 
 const LOCALE_KEY = "orchestra-oss-locale";
 const STATE_KEY = "orchestra-oss-state";
@@ -863,6 +871,7 @@ export function OrchestraBoard() {
   const [selectedTemplateId, setSelectedTemplateId] = useState<OrchestraTemplateId>(orchestraScenarios[0]?.template ?? "delivery");
   const [boardSearchQuery, setBoardSearchQuery] = useState("");
   const [boardNameDraft, setBoardNameDraft] = useState(defaultBoard.feature.title);
+  const [dispatchQueue, setDispatchQueue] = useState<DispatchQueueItem[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [quickFilter, setQuickFilter] = useState<QuickFilter>("all");
   const [laneFilter, setLaneFilter] = useState<OrchestraTask["lane"] | "all">("all");
@@ -1067,6 +1076,7 @@ export function OrchestraBoard() {
           batchSummaries?: BatchRunSummary[];
           timeline?: OrchestraTimelineEvent[];
           selectedCommandTaskIds?: string[];
+          dispatchQueue?: DispatchQueueItem[];
           selectedTemplateId?: OrchestraTemplateId;
           batchStrategy?: BatchStrategy;
           adapterMode?: ExecutorAdapterMode;
@@ -1116,6 +1126,7 @@ export function OrchestraBoard() {
           setBoardNameDraft(activeSnapshot.name);
         }
 
+        setDispatchQueue(parsed.dispatchQueue ?? []);
         setBatchStrategy(parsed.batchStrategy ?? "manual");
         setAdapterMode(parsed.adapterMode ?? "simulated-local");
         setExecutionStage(parsed.executionStage ?? "preview");
@@ -1264,6 +1275,19 @@ export function OrchestraBoard() {
       suggestedBatch,
     };
   }, [boardSnapshots]);
+  const nextDispatchTarget = useMemo(() => {
+    const first = dispatchQueue[0];
+    if (!first) {
+      return null;
+    }
+
+    const queuedForBoard = dispatchQueue.filter((item) => item.boardId === first.boardId);
+    return {
+      boardId: first.boardId,
+      boardName: first.boardName,
+      items: queuedForBoard,
+    };
+  }, [dispatchQueue]);
 
   useEffect(() => {
     window.localStorage.setItem(LOCALE_KEY, locale);
@@ -1324,6 +1348,7 @@ export function OrchestraBoard() {
       JSON.stringify({
         activeBoardId,
         boards: boardSnapshots,
+        dispatchQueue,
         selectedTemplateId,
         batchStrategy,
         adapterMode,
@@ -1331,7 +1356,7 @@ export function OrchestraBoard() {
         commandTemplates,
       }),
     );
-  }, [activeBoardId, adapterMode, batchStrategy, boardSnapshots, commandTemplates, executionStage, selectedTemplateId]);
+  }, [activeBoardId, adapterMode, batchStrategy, boardSnapshots, commandTemplates, dispatchQueue, executionStage, selectedTemplateId]);
 
   function handleGeneratePlan() {
     const idea: OrchestraFeatureIdea = {
@@ -1439,6 +1464,68 @@ export function OrchestraBoard() {
       ...snapshot,
       selectedTaskId: taskId,
     });
+  }
+
+  function handleQueueDispatchItem(item: DispatchQueueItem) {
+    setDispatchQueue((current) => (
+      current.some((entry) => entry.boardId === item.boardId && entry.taskId === item.taskId)
+        ? current
+        : [...current, item]
+    ));
+  }
+
+  function handleQueueSuggestedBatch() {
+    setDispatchQueue((current) => {
+      const next = [...current];
+      portfolioActionPlan.suggestedBatch.forEach((task) => {
+        if (!next.some((entry) => entry.boardId === task.boardId && entry.taskId === task.taskId)) {
+          next.push({
+            boardId: task.boardId,
+            boardName: task.boardName,
+            taskId: task.taskId,
+            title: task.title,
+            owner: task.owner,
+            priority: task.priority,
+          });
+        }
+      });
+      return next;
+    });
+  }
+
+  function handleRemoveDispatchItem(boardId: string, taskId: string) {
+    setDispatchQueue((current) => current.filter((item) => !(item.boardId === boardId && item.taskId === taskId)));
+  }
+
+  function handleClearDispatchQueue() {
+    setDispatchQueue([]);
+  }
+
+  function handleLoadDispatchQueue() {
+    if (!nextDispatchTarget) {
+      return;
+    }
+
+    const snapshot = boardSnapshots.find((candidate) => candidate.id === nextDispatchTarget.boardId);
+    if (!snapshot) {
+      return;
+    }
+
+    const taskIds = nextDispatchTarget.items
+      .map((item) => item.taskId)
+      .filter((taskId) => snapshot.board.tasks.some((task) => task.id === taskId));
+    const leadTask = snapshot.board.tasks.find((task) => task.id === taskIds[0]);
+
+    hydrateFromSnapshot({
+      ...snapshot,
+      selectedTaskId: leadTask?.id ?? snapshot.selectedTaskId,
+      selectedCommandTaskIds: taskIds,
+    });
+    if (leadTask) {
+      setPacket(buildCommandPacket(snapshot.board.feature, leadTask, leadTask.owner, commandTemplates));
+    }
+    setInspectorTab("batch");
+    setDispatchQueue((current) => current.filter((item) => item.boardId !== nextDispatchTarget.boardId));
   }
 
   function handleCreateBoardSnapshot() {
@@ -2117,15 +2204,34 @@ export function OrchestraBoard() {
                 <div className="text-xs uppercase tracking-[0.18em] text-slate-500">
                   {locale === "zh" ? "推荐下一批执行" : "Suggested Cross-Board Batch"}
                 </div>
+                <div className="mt-3 flex items-center justify-between gap-2">
+                  <span className="text-xs text-slate-500">
+                    {locale === "zh" ? `已排队 ${dispatchQueue.length} 个任务` : `${dispatchQueue.length} queued`}
+                  </span>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="rounded-full border-slate-200 bg-white"
+                    onClick={handleQueueSuggestedBatch}
+                    disabled={!portfolioActionPlan.suggestedBatch.length}
+                  >
+                    {locale === "zh" ? "整批加入队列" : "Queue All"}
+                  </Button>
+                </div>
                 <div className="mt-3 space-y-2">
                   {portfolioActionPlan.suggestedBatch.map((task) => (
-                    <button
+                    <div
                       key={`${task.boardId}-${task.taskId}`}
-                      type="button"
-                      onClick={() => handleOpenPortfolioTask(task.boardId, task.taskId)}
-                      className="w-full rounded-2xl border border-slate-200 bg-white/90 px-3 py-3 text-left transition-colors hover:border-slate-300"
+                      className="rounded-2xl border border-slate-200 bg-white/90 px-3 py-3"
                     >
-                      <div className="truncate text-sm font-semibold text-slate-950">{task.title}</div>
+                      <button
+                        type="button"
+                        onClick={() => handleOpenPortfolioTask(task.boardId, task.taskId)}
+                        className="w-full text-left"
+                      >
+                        <div className="truncate text-sm font-semibold text-slate-950">{task.title}</div>
+                      </button>
                       <div className="mt-1 text-xs text-slate-500">{task.boardName}</div>
                       <div className="mt-2 flex flex-wrap gap-1 text-xs">
                         <Badge className={cn("rounded-full", ownerTone[task.owner])}>{task.owner}</Badge>
@@ -2133,10 +2239,118 @@ export function OrchestraBoard() {
                           {locale === "zh" ? `优先级 ${priorityLabel[locale][task.priority]}` : `Priority ${priorityLabel[locale][task.priority]}`}
                         </Badge>
                       </div>
-                    </button>
+                      <div className="mt-3 flex items-center justify-between gap-2">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="rounded-full"
+                          onClick={() => handleOpenPortfolioTask(task.boardId, task.taskId)}
+                        >
+                          {locale === "zh" ? "查看任务" : "Open Task"}
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          className="rounded-full bg-slate-950 text-white hover:bg-slate-800"
+                          onClick={() => handleQueueDispatchItem({
+                            boardId: task.boardId,
+                            boardName: task.boardName,
+                            taskId: task.taskId,
+                            title: task.title,
+                            owner: task.owner,
+                            priority: task.priority,
+                          })}
+                        >
+                          {locale === "zh" ? "加入调度队列" : "Queue Dispatch"}
+                        </Button>
+                      </div>
+                    </div>
                   ))}
                 </div>
               </div>
+            </div>
+
+            <div className="rounded-[20px] border border-slate-200/80 bg-slate-50/80 p-3">
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                <div>
+                  <div className="text-xs uppercase tracking-[0.18em] text-slate-500">
+                    {locale === "zh" ? "Dispatch Queue" : "Dispatch Queue"}
+                  </div>
+                  <div className="mt-1 text-sm text-slate-600">
+                    {nextDispatchTarget
+                      ? (locale === "zh"
+                        ? `下一步会装载 ${nextDispatchTarget.boardName} 的 ${nextDispatchTarget.items.length} 个任务到执行区。`
+                        : `Next load will send ${nextDispatchTarget.items.length} tasks from ${nextDispatchTarget.boardName} into the batch console.`)
+                      : (locale === "zh"
+                        ? "先从上面的推荐批次中把任务加入队列。"
+                        : "Queue tasks from the suggested batch above first.")}
+                  </div>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="rounded-full border-slate-200 bg-white"
+                    onClick={handleClearDispatchQueue}
+                    disabled={!dispatchQueue.length}
+                  >
+                    {locale === "zh" ? "清空队列" : "Clear Queue"}
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="rounded-full bg-slate-950 text-white hover:bg-slate-800"
+                    onClick={handleLoadDispatchQueue}
+                    disabled={!nextDispatchTarget}
+                  >
+                    {locale === "zh" ? "装载到执行区" : "Load Into Batch"}
+                  </Button>
+                </div>
+              </div>
+              <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+                {dispatchQueue.map((item) => (
+                  <div
+                    key={`${item.boardId}-${item.taskId}`}
+                    className="rounded-2xl border border-slate-200 bg-white/90 px-3 py-3"
+                  >
+                    <div className="truncate text-sm font-semibold text-slate-950">{item.title}</div>
+                    <div className="mt-1 text-xs text-slate-500">{item.boardName}</div>
+                    <div className="mt-2 flex flex-wrap gap-1 text-xs">
+                      <Badge className={cn("rounded-full", ownerTone[item.owner])}>{item.owner}</Badge>
+                      <Badge variant="outline" className={cn("rounded-full", priorityTone[item.priority])}>
+                        {priorityLabel[locale][item.priority]}
+                      </Badge>
+                    </div>
+                    <div className="mt-3 flex items-center justify-between gap-2">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="rounded-full"
+                        onClick={() => handleOpenPortfolioTask(item.boardId, item.taskId)}
+                      >
+                        {locale === "zh" ? "查看" : "Open"}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="rounded-full text-slate-500"
+                        onClick={() => handleRemoveDispatchItem(item.boardId, item.taskId)}
+                      >
+                        {locale === "zh" ? "移除" : "Remove"}
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              {!dispatchQueue.length ? (
+                <div className="mt-3 rounded-2xl border border-dashed border-slate-200 bg-white/70 px-4 py-5 text-sm text-slate-500">
+                  {locale === "zh" ? "队列为空。先把跨 board 的 ready 任务排进来，再统一装载执行。" : "The queue is empty. Queue ready tasks across boards, then load them into the batch console."}
+                </div>
+              ) : null}
             </div>
 
             <div className="rounded-[20px] border border-slate-200/80 bg-slate-50/80 p-3">
