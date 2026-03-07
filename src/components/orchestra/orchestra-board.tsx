@@ -29,9 +29,11 @@ import {
 } from "@/lib/orchestra/commander";
 import { getDefaultOrchestraBoard, orchestraAgents, orchestraScenarios } from "@/lib/orchestra/data";
 import {
+  buildExecutorDiagnostics,
   executorAdapters,
   runBatchWithAdapter,
   simulatedExecutorAdapter,
+  type ExecutorDiagnostic,
   type ExecutorRunResult,
 } from "@/lib/orchestra/executor";
 import { buildBoardFromIdea, orchestraTemplates, summarizeByOwner } from "@/lib/orchestra/planner";
@@ -1012,38 +1014,43 @@ export function OrchestraBoard() {
       : [],
     [board.tasks, selectedTask, selectedTaskId],
   );
-  const environmentChecks = useMemo(
-    () => [
-      {
-        id: "codex",
-        label: "Codex CLI",
-        ok: commandTemplates.codex.includes("codex"),
-        detail: locale === "zh"
-          ? "模板里已经包含 Codex 命令前缀。"
-          : "The configured template includes a Codex command prefix.",
-      },
-      {
-        id: "claude",
-        label: "Claude Code CLI",
-        ok: commandTemplates.claude_code.includes("claude"),
-        detail: locale === "zh"
-          ? "模板里已经包含 Claude Code 命令前缀。"
-          : "The configured template includes a Claude Code command prefix.",
-      },
-      {
-        id: "stage",
-        label: locale === "zh" ? "运行档位" : "Execution Stage",
-        ok: executionStage !== "live",
-        detail: executionStage === "live"
-          ? (locale === "zh" ? "当前仍为开源演示仓库，live 仅作为未来接入占位。" : "Live remains a placeholder in this open-source demo.")
-          : (locale === "zh" ? "当前档位仍然是安全模式，不会调用外部进程。" : "Current stage is still safe and will not invoke external processes."),
-      },
-    ],
-    [commandTemplates.claude_code, commandTemplates.codex, executionStage, locale],
-  );
   const commandPackets = useMemo(
     () => orderedCommandTasks.map((task) => buildCommandPacket(board.feature, task, task.owner, commandTemplates)),
     [board.feature, commandTemplates, orderedCommandTasks],
+  );
+  const environmentChecks = useMemo<ExecutorDiagnostic[]>(
+    () => buildExecutorDiagnostics({
+      adapter: selectedAdapter,
+      stage: executionStage,
+      packetCount: commandPackets.length,
+      codexTemplate: commandTemplates.codex,
+      claudeTemplate: commandTemplates.claude_code,
+    }).map((check) => ({
+      ...check,
+      label: locale === "zh"
+        ? ({
+            "Adapter stage": "Adapter 档位",
+            "Command templates": "命令模板",
+            "Batch payload": "批次载荷",
+            "CLI hints": "CLI 提示",
+          }[check.label] ?? check.label)
+        : check.label,
+      detail: locale === "zh"
+        ? ({
+            "Adapter stage": executionStage === "live" && !selectedAdapter.supportsLive
+              ? `${selectedAdapter.name} 还只是安全占位，不能真的进入 live。`
+              : `${selectedAdapter.name} 可以在当前 ${executionStage} 档位下运行演示流程。`,
+            "Command templates": commandTemplates.codex.trim() && commandTemplates.claude_code.trim()
+              ? "Codex 和 Claude Code 模板都已经配置。"
+              : "Codex 和 Claude Code 模板需要同时填写。",
+            "Batch payload": commandPackets.length > 0
+              ? `当前已经生成 ${commandPackets.length} 个 handoff packet。`
+              : "当前还没有可执行的 handoff packet。",
+            "CLI hints": `建议命令前缀：${selectedAdapter.commandHints.join("、")}。`,
+          }[check.label] ?? check.detail)
+        : check.detail,
+    })),
+    [commandPackets.length, commandTemplates.claude_code, commandTemplates.codex, executionStage, locale, selectedAdapter],
   );
   const runnableVisibleTaskIds = useMemo(
     () =>
@@ -1765,6 +1772,7 @@ export function OrchestraBoard() {
       board,
       tasks: orderedCommandTasks,
       packets: commandPackets,
+      stage: executionStage,
     });
 
     if (!executionLog.length) {
@@ -1805,7 +1813,7 @@ export function OrchestraBoard() {
 
     setRunResult({
       executor: executionLog[executionLog.length - 1]?.result.executor ?? "commander",
-      mode: "dry_run",
+      mode: executionLog[executionLog.length - 1]?.result.mode ?? "dry_run",
       command: commandPackets.length > 1 ? buildBatchCommand(commandPackets) : commandPackets[0]?.suggestedCommand ?? "",
       stdout: [
         locale === "zh" ? `批次总任务数：${executionLog.length}` : `Batch tasks: ${executionLog.length}`,
@@ -3799,7 +3807,21 @@ export function OrchestraBoard() {
                         </select>
                       </label>
                       <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
-                        <div className="text-sm font-medium text-slate-900">{selectedAdapter.name}</div>
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="text-sm font-medium text-slate-900">{selectedAdapter.name}</div>
+                          <Badge
+                            className={cn(
+                              "rounded-full border",
+                              selectedAdapter.supportsLive
+                                ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                                : "border-amber-200 bg-amber-50 text-amber-700",
+                            )}
+                          >
+                            {selectedAdapter.supportsLive
+                              ? (locale === "zh" ? "支持 live" : "Live-ready")
+                              : (locale === "zh" ? "安全占位" : "Safe stub")}
+                          </Badge>
+                        </div>
                         <p className="mt-2 text-sm leading-6 text-slate-600">{selectedAdapter.description}</p>
                       </div>
                     </div>
