@@ -1564,20 +1564,12 @@ export function OrchestraBoard() {
               <GitPullRequestArrow className="h-5 w-5 text-sky-600" />
               {locale === "zh" ? "任务图看板" : "Task Graph Board"}
             </CardTitle>
-            <CardDescription>
-              {locale === "zh"
-                ? "任务不是按普通看板列组织，而是按 feature 的交付流程组织。"
-                : "Tasks are grouped by the feature delivery flow instead of a generic kanban."}
-            </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="rounded-[26px] border border-slate-200 bg-slate-50/65 p-4">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
                   <div className="text-sm font-medium text-slate-900">{locale === "zh" ? "任务筛选" : "Task Filters"}</div>
-                  <p className="mt-1 text-xs text-slate-500">
-                    {locale === "zh" ? "先缩小范围，再去拖拽、编辑或批量执行。" : "Narrow the scope first, then drag, edit, or run a batch."}
-                  </p>
                 </div>
                 <Button
                   variant="ghost"
@@ -1879,9 +1871,6 @@ export function OrchestraBoard() {
                 <Clipboard className="h-5 w-5 text-slate-950" />
                 {locale === "zh" ? "任务详情" : "Task Detail"}
               </CardTitle>
-              <CardDescription>
-                {locale === "zh" ? "查看选中任务的上下文、时间线、拖拽位置和交接信息。" : "Inspect the selected task context, ordering, timeline, and handoff."}
-              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               {selectedTask ? (
@@ -2191,11 +2180,6 @@ export function OrchestraBoard() {
                 <GitPullRequestArrow className="h-5 w-5 text-sky-600" />
                 {locale === "zh" ? "依赖地图" : "Dependency Map"}
               </CardTitle>
-              <CardDescription>
-                {locale === "zh"
-                  ? "把任务间的依赖和反向依赖直接列出来，方便排查阻塞。"
-                  : "See task dependencies and reverse dependencies without inferring them from cards."}
-              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               {dependencyMap.length ? (
@@ -2354,9 +2338,6 @@ export function OrchestraBoard() {
                 <Cpu className="h-5 w-5 text-slate-950" />
                 {locale === "zh" ? "Commander 控制台" : "Commander Console"}
               </CardTitle>
-              <CardDescription>
-                {locale === "zh" ? "这里会生成单任务或批量 handoff，并通过可切换的 executor adapter 演示执行。" : "This generates single-task or batch handoffs and demonstrates execution through switchable executor adapters."}
-              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
