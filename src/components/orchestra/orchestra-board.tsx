@@ -1902,24 +1902,22 @@ export function OrchestraBoard() {
                         {locale === "zh" ? "优先级" : "Priority"}: {priorityLabel[locale][selectedTask.priority]}
                       </Badge>
                     </div>
-                  </div>
-
-                  <div className="grid gap-3">
-                    <label className="grid gap-2 text-sm">
-                      <span className="font-medium text-slate-700">{locale === "zh" ? "任务标题" : "Task Title"}</span>
-                      <Input
-                        value={selectedTask.title}
-                        onChange={(event) => handleTaskContentChange({ title: event.target.value })}
-                      />
-                    </label>
-                    <label className="grid gap-2 text-sm">
-                      <span className="font-medium text-slate-700">{locale === "zh" ? "任务摘要" : "Task Summary"}</span>
-                      <Textarea
-                        value={selectedTask.summary}
-                        onChange={(event) => handleTaskContentChange({ summary: event.target.value })}
-                        className="min-h-24"
-                      />
-                    </label>
+                    <div className="mt-4 flex flex-wrap items-center gap-2">
+                      <Button size="sm" className="rounded-full bg-slate-950 text-white hover:bg-slate-800" onClick={() => handleGenerateHandoff(selectedTask)}>
+                        {locale === "zh" ? "立即交接" : "Handoff Now"}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="rounded-full border-slate-200 bg-white"
+                        onClick={() => {
+                          handleGenerateHandoff(selectedTask);
+                          setInspectorTab("batch");
+                        }}
+                      >
+                        {locale === "zh" ? "打开执行区" : "Open Batch"}
+                      </Button>
+                    </div>
                   </div>
 
                   <div className="grid gap-3 lg:grid-cols-3">
@@ -1984,6 +1982,31 @@ export function OrchestraBoard() {
                       </div>
                     </div>
                   </div>
+
+                  <details className="group rounded-2xl border border-slate-200 bg-white">
+                    <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-medium text-slate-900">
+                      <span>{locale === "zh" ? "内容编辑" : "Content Editing"}</span>
+                      <span className="text-xs text-slate-500 group-open:hidden">{locale === "zh" ? "展开" : "Expand"}</span>
+                      <span className="hidden text-xs text-slate-500 group-open:inline">{locale === "zh" ? "收起" : "Collapse"}</span>
+                    </summary>
+                    <div className="grid gap-3 border-t border-slate-200 p-4">
+                      <label className="grid gap-2 text-sm">
+                        <span className="font-medium text-slate-700">{locale === "zh" ? "任务标题" : "Task Title"}</span>
+                        <Input
+                          value={selectedTask.title}
+                          onChange={(event) => handleTaskContentChange({ title: event.target.value })}
+                        />
+                      </label>
+                      <label className="grid gap-2 text-sm">
+                        <span className="font-medium text-slate-700">{locale === "zh" ? "任务摘要" : "Task Summary"}</span>
+                        <Textarea
+                          value={selectedTask.summary}
+                          onChange={(event) => handleTaskContentChange({ summary: event.target.value })}
+                          className="min-h-24"
+                        />
+                      </label>
+                    </div>
+                  </details>
 
                   <details className="group rounded-2xl border border-slate-200 bg-white">
                     <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-medium text-slate-900">
@@ -2245,19 +2268,16 @@ export function OrchestraBoard() {
             </CardContent>
           </Card> : null}
 
-          {inspectorTab === "task" ? <Card className="border-slate-200/80 bg-white/92 shadow-[0_14px_30px_-26px_rgba(15,23,42,0.18)]">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-slate-950">
-                <Plus className="h-5 w-5 text-sky-600" />
-                Task Composer
-              </CardTitle>
-              <CardDescription>
-                {locale === "zh"
-                  ? "手动添加一个新任务，并把它接到当前任务图里。"
-                  : "Add a new task manually and connect it into the current task graph."}
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="grid gap-3">
+          {inspectorTab === "task" ? <details className="group rounded-[24px] border border-slate-200 bg-white/92 shadow-[0_10px_24px_-24px_rgba(15,23,42,0.14)]">
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-medium text-slate-900">
+              <div className="flex items-center gap-2">
+                <Plus className="h-4 w-4 text-sky-600" />
+                <span>{locale === "zh" ? "新增任务" : "Task Composer"}</span>
+              </div>
+              <span className="text-xs text-slate-500 group-open:hidden">{locale === "zh" ? "展开" : "Expand"}</span>
+              <span className="hidden text-xs text-slate-500 group-open:inline">{locale === "zh" ? "收起" : "Collapse"}</span>
+            </summary>
+            <div className="grid gap-3 border-t border-slate-200 p-4">
               <label className="grid gap-2 text-sm">
                 <span className="font-medium text-slate-700">{locale === "zh" ? "任务标题" : "Task Title"}</span>
                 <Input value={newTaskTitle} onChange={(event) => setNewTaskTitle(event.target.value)} />
@@ -2325,8 +2345,8 @@ export function OrchestraBoard() {
                   {locale === "zh" ? "新增任务" : "Add Task"}
                 </Button>
               </div>
-            </CardContent>
-          </Card> : null}
+            </div>
+          </details> : null}
 
           {inspectorTab === "batch" ? <Card className="border-slate-200/80 bg-white/92 shadow-[0_14px_30px_-26px_rgba(15,23,42,0.18)]">
             <CardHeader>
