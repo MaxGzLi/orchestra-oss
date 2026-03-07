@@ -1839,9 +1839,40 @@ export function OrchestraBoard() {
             </div>
             {!visibleTasks.length ? (
               <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-6 text-sm leading-6 text-slate-600">
-                {locale === "zh"
-                  ? "当前筛选条件下没有任务。你可以清空筛选，或者创建一个新任务。"
-                  : "No tasks match the current filters. Clear the filters or create a new task."}
+                <div className="font-medium text-slate-900">
+                  {locale === "zh"
+                    ? "当前筛选条件下没有任务。"
+                    : "No tasks match the current filters."}
+                </div>
+                <div className="mt-2">
+                  {locale === "zh"
+                    ? "你可以先清空筛选，或者去右侧新增任务。"
+                    : "Clear the filters or create a new task from the inspector."}
+                </div>
+                <div className="mt-4 flex flex-wrap gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="rounded-full border-slate-200 bg-white"
+                    onClick={() => {
+                      setSearchQuery("");
+                      setQuickFilter("all");
+                      setLaneFilter("all");
+                      setStateFilter("all");
+                      setOwnerFilter("all");
+                      setPriorityFilter("all");
+                    }}
+                  >
+                    {locale === "zh" ? "清空筛选" : "Clear Filters"}
+                  </Button>
+                  <Button
+                    size="sm"
+                    className="rounded-full bg-slate-950 text-white hover:bg-slate-800"
+                    onClick={() => setInspectorTab("task")}
+                  >
+                    {locale === "zh" ? "打开新增任务" : "Open Composer"}
+                  </Button>
+                </div>
               </div>
             ) : null}
           </CardContent>
@@ -2618,7 +2649,32 @@ export function OrchestraBoard() {
                 </>
               ) : (
                 <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-6 text-sm leading-6 text-slate-600">
-                  {locale === "zh" ? "先在左侧任务卡上点击 `生成交接包`。" : "Click `Generate Handoff` on a task card first."}
+                  <div className="font-medium text-slate-900">
+                    {locale === "zh" ? "还没有交接包。" : "No handoff yet."}
+                  </div>
+                  <div className="mt-2">
+                    {locale === "zh"
+                      ? "先在左侧任务卡点击“交接”，或直接把当前焦点任务送到执行区。"
+                      : "Click handoff on a task card, or send the current focused task here."}
+                  </div>
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="rounded-full border-slate-200 bg-white"
+                      onClick={() => selectedTask && handleGenerateHandoff(selectedTask)}
+                      disabled={!selectedTask}
+                    >
+                      {locale === "zh" ? "交接当前任务" : "Handoff Current Task"}
+                    </Button>
+                    <Button
+                      size="sm"
+                      className="rounded-full bg-slate-950 text-white hover:bg-slate-800"
+                      onClick={() => setInspectorTab("task")}
+                    >
+                      {locale === "zh" ? "回到任务" : "Back to Task"}
+                    </Button>
+                  </div>
                 </div>
               )}
             </CardContent>
