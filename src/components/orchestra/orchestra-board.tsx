@@ -293,6 +293,46 @@ function ownerLabel(owner: OrchestraTask["owner"], locale: Locale): string {
   }
 }
 
+function suggestDependenciesForLane(
+  tasks: OrchestraTask[],
+  lane: OrchestraTask["lane"],
+  selectedTaskId?: string,
+  excludeTaskId?: string,
+): string[] {
+  const orderedTasks = tasks.filter((task) => task.id !== excludeTaskId);
+  const selectedTask = selectedTaskId ? orderedTasks.find((task) => task.id === selectedTaskId) : null;
+
+  const preferSelectedTask =
+    selectedTask &&
+    selectedTask.lane !== lane &&
+    laneOrder.indexOf(selectedTask.lane) <= laneOrder.indexOf(lane);
+
+  if (preferSelectedTask) {
+    return [selectedTask.id];
+  }
+
+  if (lane === "strategy") {
+    return [];
+  }
+
+  const previousLane = laneOrder[laneOrder.indexOf(lane) - 1];
+  if (!previousLane) {
+    return [];
+  }
+
+  const previousLaneTasks = orderedTasks.filter((task) => task.lane === previousLane);
+  if (!previousLaneTasks.length) {
+    return [];
+  }
+
+  if (lane === "governance") {
+    return previousLaneTasks.map((task) => task.id);
+  }
+
+  const doneCandidate = [...previousLaneTasks].reverse().find((task) => task.state === "done");
+  return [doneCandidate?.id ?? previousLaneTasks[previousLaneTasks.length - 1].id];
+}
+
 function kindLabel(kind: OrchestraTask["kind"], locale: Locale): string {
   if (locale === "en") {
     return kind;
@@ -860,6 +900,16 @@ export function OrchestraBoard() {
     () => executorAdapters.find((adapter) => adapter.id === adapterMode) ?? simulatedExecutorAdapter,
     [adapterMode],
   );
+  const suggestedNewTaskDependencies = useMemo(
+    () => suggestDependenciesForLane(board.tasks, newTaskLane, selectedTaskId),
+    [board.tasks, newTaskLane, selectedTaskId],
+  );
+  const suggestedSelectedTaskDependencies = useMemo(
+    () => selectedTask
+      ? suggestDependenciesForLane(board.tasks, selectedTask.lane, selectedTaskId, selectedTask.id)
+      : [],
+    [board.tasks, selectedTask, selectedTaskId],
+  );
   const environmentChecks = useMemo(
     () => [
       {
@@ -1195,6 +1245,10 @@ export function OrchestraBoard() {
     setBoard((current) => updateTask(current, selectedTask.id, { dependsOn: nextDependsOn }));
   }
 
+  function handleApplySuggestedDependencies(taskId: string, dependencyIds: string[]) {
+    setBoard((current) => updateTask(current, taskId, { dependsOn: dependencyIds }));
+  }
+
   function handleCreateTask() {
     const title = newTaskTitle.trim();
     const summary = newTaskSummary.trim();
@@ -1211,7 +1265,7 @@ export function OrchestraBoard() {
       kind: newTaskLane === "planning" ? "spec" : newTaskLane === "governance" ? "review" : "implementation",
       priority: newTaskPriority,
       owner: newTaskOwner,
-      dependsOn: selectedTask ? [selectedTask.id] : [],
+      dependsOn: suggestedNewTaskDependencies,
       acceptance: [locale === "zh" ? "补充验收标准" : "Add acceptance criteria"],
       lane: newTaskLane,
       comments: [],
@@ -2158,6 +2212,36 @@ export function OrchestraBoard() {
                             {locale === "zh" ? "删除任务" : "Delete Task"}
                           </Button>
                         </div>
+                        {suggestedSelectedTaskDependencies.length ? (
+                          <div className="mb-3 rounded-xl border border-sky-200 bg-sky-50/80 p-3">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <div className="text-xs font-medium text-sky-800">
+                                {locale === "zh" ? "建议依赖" : "Suggested Dependencies"}
+                              </div>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-7 rounded-full px-3 text-sky-700 hover:bg-sky-100"
+                                onClick={() => handleApplySuggestedDependencies(selectedTask.id, suggestedSelectedTaskDependencies)}
+                              >
+                                {locale === "zh" ? "应用建议" : "Apply Suggestion"}
+                              </Button>
+                            </div>
+                            <div className="mt-2 flex flex-wrap gap-2">
+                              {suggestedSelectedTaskDependencies.map((dependencyId) => {
+                                const dependency = board.tasks.find((task) => task.id === dependencyId);
+                                if (!dependency) {
+                                  return null;
+                                }
+                                return (
+                                  <Badge key={dependencyId} variant="outline" className="rounded-full border-sky-200 bg-white text-sky-700">
+                                    {translateTask(dependency, locale).title}
+                                  </Badge>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        ) : null}
                         <div className="grid gap-2">
                           {board.tasks.filter((task) => task.id !== selectedTask.id).length ? (
                             board.tasks
@@ -2369,6 +2453,26 @@ export function OrchestraBoard() {
               <span className="hidden text-xs text-slate-500 group-open:inline">{locale === "zh" ? "收起" : "Collapse"}</span>
             </summary>
             <div className="grid gap-3 border-t border-slate-200 p-4">
+              {suggestedNewTaskDependencies.length ? (
+                <div className="rounded-xl border border-sky-200 bg-sky-50/80 p-3">
+                  <div className="text-xs font-medium text-sky-800">
+                    {locale === "zh" ? "系统会默认添加这些依赖" : "Suggested dependencies will be added"}
+                  </div>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {suggestedNewTaskDependencies.map((dependencyId) => {
+                      const dependency = board.tasks.find((task) => task.id === dependencyId);
+                      if (!dependency) {
+                        return null;
+                      }
+                      return (
+                        <Badge key={dependencyId} variant="outline" className="rounded-full border-sky-200 bg-white text-sky-700">
+                          {translateTask(dependency, locale).title}
+                        </Badge>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : null}
               <label className="grid gap-2 text-sm">
                 <span className="font-medium text-slate-700">{locale === "zh" ? "任务标题" : "Task Title"}</span>
                 <Input value={newTaskTitle} onChange={(event) => setNewTaskTitle(event.target.value)} />
@@ -2423,13 +2527,13 @@ export function OrchestraBoard() {
               </div>
               <div className="flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50/80 px-4 py-3 text-sm text-slate-600">
                 <span>
-                  {selectedTask
+                  {suggestedNewTaskDependencies.length
                     ? locale === "zh"
-                      ? `新任务会默认依赖当前选中的任务：${translateTask(selectedTask, locale).title}`
-                      : `The new task will depend on the currently selected task: ${translateTask(selectedTask, locale).title}`
+                      ? "新任务会带上建议依赖。"
+                      : "The new task will include suggested dependencies."
                     : locale === "zh"
-                      ? "当前没有选中的任务。"
-                      : "No task is currently selected."}
+                      ? "当前没有默认依赖。"
+                      : "No default dependencies for this task."}
                 </span>
                 <Button onClick={handleCreateTask} className="rounded-full bg-slate-950 px-5 text-white shadow-sm hover:bg-slate-800">
                   <Plus className="h-4 w-4" />
