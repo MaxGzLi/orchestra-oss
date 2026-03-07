@@ -893,6 +893,17 @@ export function OrchestraBoard() {
     () => orderedCommandTasks.map((task) => buildCommandPacket(board.feature, task, task.owner, commandTemplates)),
     [board.feature, commandTemplates, orderedCommandTasks],
   );
+  const runnableTaskCount = useMemo(
+    () =>
+      orderedCommandTasks.filter((task) =>
+        task.state === "ready" &&
+        task.dependsOn.every((dependencyId) => {
+          const dependency = board.tasks.find((candidate) => candidate.id === dependencyId);
+          return dependency?.state === "done";
+        }),
+      ).length,
+    [board.tasks, orderedCommandTasks],
+  );
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
@@ -1039,6 +1050,7 @@ export function OrchestraBoard() {
     setPacket(buildCommandPacket(board.feature, task, task.owner));
     setSelectedCommandTaskIds([task.id]);
     setRunResult(null);
+    setInspectorTab("batch");
   }
 
   function handleGenerateBatchHandoff() {
@@ -1049,6 +1061,7 @@ export function OrchestraBoard() {
     setSelectedTaskId(orderedCommandTasks[0]?.id ?? "");
     setPacket(commandPackets[0] ?? null);
     setRunResult(null);
+    setInspectorTab("batch");
   }
 
   function handleRunPacket() {
@@ -1394,6 +1407,76 @@ export function OrchestraBoard() {
         </Card>
       </section>
 
+      <section className="grid gap-3">
+        <div className="rounded-[24px] border border-slate-200 bg-white/88 px-4 py-3 shadow-[0_10px_24px_-24px_rgba(15,23,42,0.14)]">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
+              <span className="text-xs uppercase tracking-[0.18em] text-slate-500">
+                {locale === "zh" ? "当前焦点" : "Current Focus"}
+              </span>
+              <Badge className="rounded-full bg-slate-950 text-white">
+                {selectedTask ? translateTask(selectedTask, locale).title : (locale === "zh" ? "未选择任务" : "No task selected")}
+              </Badge>
+              <Badge variant="outline" className="rounded-full border-slate-300 text-slate-600">
+                {locale === "zh" ? `批次 ${commandTasks.length}` : `Batch ${commandTasks.length}`}
+              </Badge>
+              <Badge
+                className={cn(
+                  "rounded-full border",
+                  runnableTaskCount > 0
+                    ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                    : "border-amber-200 bg-amber-50 text-amber-700",
+                )}
+              >
+                {runnableTaskCount > 0
+                  ? (locale === "zh" ? `可运行 ${runnableTaskCount}` : `Runnable ${runnableTaskCount}`)
+                  : (locale === "zh" ? "待准备" : "Pending")}
+              </Badge>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="rounded-full"
+                onClick={() => setInspectorTab("task")}
+              >
+                {locale === "zh" ? "查看当前任务" : "Open Task"}
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="rounded-full border-slate-200 bg-white"
+                onClick={() => {
+                  setInspectorTab("batch");
+                  if (!packet && selectedTask) {
+                    handleGenerateHandoff(selectedTask);
+                  }
+                }}
+              >
+                {locale === "zh" ? "打开执行区" : "Open Batch"}
+              </Button>
+              <Button
+                size="sm"
+                className="rounded-full bg-slate-950 text-white hover:bg-slate-800"
+                onClick={() => {
+                  setInspectorTab("batch");
+                  if (!packet && selectedTask) {
+                    handleGenerateHandoff(selectedTask);
+                    return;
+                  }
+                  if (commandPackets.length) {
+                    handleRunPacket();
+                  }
+                }}
+                disabled={!selectedTask}
+              >
+                {locale === "zh" ? "立即执行" : "Run Now"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <details className="group rounded-[28px] border border-slate-200 bg-slate-50/70 shadow-[0_14px_30px_-26px_rgba(15,23,42,0.14)]">
         <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-5 py-4 text-sm font-medium text-slate-900">
           <span>{locale === "zh" ? "工作台设置与低频信息" : "Workspace Setup and Secondary Panels"}</span>
@@ -1737,11 +1820,11 @@ export function OrchestraBoard() {
                               {locale === "zh" ? "交接目标：" : "Target: "} {ownerLabel(task.owner, locale)}
                             </div>
                             <div className="flex flex-wrap items-center gap-2">
+                              <Button size="sm" className="h-8 rounded-full bg-slate-950 px-3 text-white hover:bg-slate-800" onClick={() => handleGenerateHandoff(task)}>
+                                {locale === "zh" ? "交接" : "Handoff"}
+                              </Button>
                               <Button variant="ghost" size="sm" className="h-8 rounded-full px-3 text-slate-600 hover:bg-slate-50" onClick={() => setSelectedTaskId(task.id)}>
                                 {locale === "zh" ? "查看" : "Inspect"}
-                              </Button>
-                              <Button variant="outline" size="sm" className="h-8 rounded-full border-slate-200 bg-white px-3 shadow-sm" onClick={() => handleGenerateHandoff(task)}>
-                                {locale === "zh" ? "交接" : "Handoff"}
                               </Button>
                             </div>
                           </div>
