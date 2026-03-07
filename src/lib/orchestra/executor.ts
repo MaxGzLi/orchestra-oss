@@ -2,6 +2,12 @@ import type { CommandPacket } from "@/lib/orchestra/commander";
 import type { OrchestraBoard, OrchestraRunRecord, OrchestraTask } from "@/lib/orchestra/types";
 
 export type ExecutorStage = "preview" | "armed" | "live";
+export type RunnerFailureCategory =
+  | "preflight_failure"
+  | "missing_binary"
+  | "invalid_command"
+  | "execution_failure"
+  | "unsupported_live_mode";
 
 export interface ExecutorDiagnostic {
   id: string;
@@ -27,6 +33,7 @@ export interface ExecutorRunResult {
   stdout: string;
   stderr: string;
   durationMs: number;
+  failureCategory?: RunnerFailureCategory;
 }
 
 export interface ExecutorLogItem {
@@ -48,6 +55,27 @@ export interface OrchestraExecutorAdapter {
   supportsLive: boolean;
   commandHints: string[];
   execute(packet: CommandPacket, task: OrchestraTask, board: OrchestraBoard): ExecutorRunResult;
+}
+
+export interface RunnerRequest {
+  executor: CommandPacket["executor"];
+  taskId: string;
+  taskTitle: string;
+  boardTitle: string;
+  stage: ExecutorStage;
+  command: string;
+  args: string[];
+  shellPreview: string;
+  runner: CommandPacket["bridge"]["runner"];
+}
+
+export interface RunnerResult {
+  ok: boolean;
+  exitCode: number | null;
+  stdout: string;
+  stderr: string;
+  durationMs: number;
+  failureCategory?: RunnerFailureCategory;
 }
 
 export const runnerProfiles: RunnerProfile[] = [
@@ -196,11 +224,98 @@ export const reviewerExecutorAdapter: OrchestraExecutorAdapter = {
   },
 };
 
+export const processRunnerStubAdapter: OrchestraExecutorAdapter = {
+  id: "process-runner-stub",
+  name: "Process Runner Stub",
+  description: "Shapes a future spawn/exec request and returns structured stub results without launching a process.",
+  supportsLive: false,
+  commandHints: ["codex", "claude-code", "echo"],
+  execute(packet, task, board) {
+    const request = buildRunnerRequest(packet, task, board, "armed");
+    const result = runWithProcessRunnerStub(request);
+    return toExecutorRunResult(packet, result);
+  },
+};
+
 export const executorAdapters: OrchestraExecutorAdapter[] = [
   simulatedExecutorAdapter,
   cliPreviewExecutorAdapter,
   reviewerExecutorAdapter,
+  processRunnerStubAdapter,
 ];
+
+export function buildRunnerRequest(
+  packet: CommandPacket,
+  task: OrchestraTask,
+  board: OrchestraBoard,
+  stage: ExecutorStage,
+): RunnerRequest {
+  return {
+    executor: packet.executor,
+    taskId: task.id,
+    taskTitle: task.title,
+    boardTitle: board.feature.title,
+    stage,
+    command: packet.bridge.command,
+    args: packet.bridge.args,
+    shellPreview: packet.bridge.shellPreview,
+    runner: packet.bridge.runner,
+  };
+}
+
+export function runWithProcessRunnerStub(request: RunnerRequest): RunnerResult {
+  if (!request.command) {
+    return {
+      ok: false,
+      exitCode: null,
+      stdout: "",
+      stderr: "Runner request is missing a command.",
+      durationMs: 0,
+      failureCategory: "invalid_command",
+    };
+  }
+
+  if (request.stage === "live") {
+    return {
+      ok: false,
+      exitCode: null,
+      stdout: "",
+      stderr: "Process runner stub cannot enter live mode in this demo.",
+      durationMs: 0,
+      failureCategory: "unsupported_live_mode",
+    };
+  }
+
+  return {
+    ok: true,
+    exitCode: 0,
+    stdout: [
+      "Prepared process runner request.",
+      `Board: ${request.boardTitle}`,
+      `Task: ${request.taskTitle}`,
+      `Runner: ${request.runner}`,
+      `Command: ${request.command}`,
+      `Args: ${request.args.join(" | ") || "(none)"}`,
+      `Stage: ${request.stage}`,
+    ].join("\n"),
+    stderr: "No process was launched. Replace this stub with a real spawn/exec implementation.",
+    durationMs: 90,
+  };
+}
+
+function toExecutorRunResult(packet: CommandPacket, result: RunnerResult): ExecutorRunResult {
+  return {
+    executor: packet.executor,
+    mode: "dry_run",
+    command: packet.bridge.command,
+    args: packet.bridge.args,
+    shellPreview: packet.bridge.shellPreview,
+    stdout: result.stdout,
+    stderr: result.stderr,
+    durationMs: result.durationMs,
+    failureCategory: result.failureCategory,
+  };
+}
 
 export function buildExecutorDiagnostics(args: {
   adapter: OrchestraExecutorAdapter;
@@ -254,6 +369,13 @@ export function buildExecutorDiagnostics(args: {
       detail: `Available runners: ${runnerProfiles.map((profile) => `${profile.label} (${profile.binary})`).join(", ")}.`,
       tone: "emerald",
     },
+    {
+      id: "process-contract",
+      label: "Process runner contract",
+      ok: true,
+      detail: "Runner requests and results are shaped for a future spawn/exec adapter.",
+      tone: "emerald",
+    },
   ];
 }
 
@@ -283,6 +405,7 @@ export function runBatchWithAdapter(args: {
         stdout: `Skipped ${task.title}.`,
         stderr: `${adapter.name} does not support live execution in this demo.`,
         durationMs: 0,
+        failureCategory: "unsupported_live_mode",
       },
     }));
   }
@@ -305,6 +428,7 @@ export function runBatchWithAdapter(args: {
           stdout: `Skipped ${task.title}.`,
           stderr: gate.reason,
           durationMs: 0,
+          failureCategory: "preflight_failure",
         },
       });
       continue;

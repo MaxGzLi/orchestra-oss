@@ -647,9 +647,11 @@ function buildRunRecord(taskId: string, result: ExecutorRunResult): OrchestraRun
     command: result.command,
     args: result.args,
     stdout: result.stdout,
-    stderr: result.shellPreview
-      ? `${result.stderr}\n\nShell preview: ${result.shellPreview}`
-      : result.stderr,
+    stderr: [
+      result.failureCategory ? `Failure category: ${result.failureCategory}` : "",
+      result.stderr,
+      result.shellPreview ? `Shell preview: ${result.shellPreview}` : "",
+    ].filter(Boolean).join("\n\n"),
     exitCode: null,
     createdAt: new Date().toISOString(),
     durationMs: result.durationMs,
@@ -1033,11 +1035,13 @@ export function OrchestraBoard() {
     }).map((check) => ({
       ...check,
       label: locale === "zh"
-        ? ({
+          ? ({
             "Adapter stage": "Adapter 档位",
             "Command templates": "命令模板",
             "Batch payload": "批次载荷",
             "CLI hints": "CLI 提示",
+            "Runner profiles": "Runner 配置",
+            "Process runner contract": "进程执行契约",
           }[check.label] ?? check.label)
         : check.label,
       detail: locale === "zh"
@@ -1052,6 +1056,8 @@ export function OrchestraBoard() {
               ? `当前已经生成 ${commandPackets.length} 个 handoff packet。`
               : "当前还没有可执行的 handoff packet。",
             "CLI hints": `建议命令前缀：${selectedAdapter.commandHints.join("、")}。`,
+            "Runner profiles": `可用 runner：${runnerProfiles.map((profile) => `${profile.label} (${profile.binary})`).join("、")}。`,
+            "Process runner contract": "当前已经具备未来接入 spawn/exec 所需的 request/result 结构。",
           }[check.label] ?? check.detail)
         : check.detail,
     })),
