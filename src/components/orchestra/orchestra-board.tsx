@@ -861,6 +861,8 @@ export function OrchestraBoard() {
   const [inspectorTab, setInspectorTab] = useState<"task" | "batch" | "runs" | "deps">("task");
   const [selectedScenarioId, setSelectedScenarioId] = useState<string>(orchestraScenarios[0]?.id ?? "");
   const [selectedTemplateId, setSelectedTemplateId] = useState<OrchestraTemplateId>(orchestraScenarios[0]?.template ?? "delivery");
+  const [boardSearchQuery, setBoardSearchQuery] = useState("");
+  const [boardNameDraft, setBoardNameDraft] = useState(defaultBoard.feature.title);
   const [searchQuery, setSearchQuery] = useState("");
   const [quickFilter, setQuickFilter] = useState<QuickFilter>("all");
   const [laneFilter, setLaneFilter] = useState<OrchestraTask["lane"] | "all">("all");
@@ -1111,6 +1113,7 @@ export function OrchestraBoard() {
           setProblem(activeSnapshot.board.feature.problem);
           setGoals(activeSnapshot.board.feature.goals.join("\n"));
           setConstraints(activeSnapshot.board.feature.constraints.join("\n"));
+          setBoardNameDraft(activeSnapshot.name);
         }
 
         setBatchStrategy(parsed.batchStrategy ?? "manual");
@@ -1132,6 +1135,21 @@ export function OrchestraBoard() {
     () => [...boardSnapshots].sort((left, right) => right.updatedAt.localeCompare(left.updatedAt)),
     [boardSnapshots],
   );
+  const visibleBoardSnapshots = useMemo(() => {
+    if (!boardSearchQuery.trim()) {
+      return sortedBoardSnapshots;
+    }
+
+    const query = boardSearchQuery.toLowerCase();
+    return sortedBoardSnapshots.filter((snapshot) => {
+      const haystack = [
+        snapshot.name,
+        snapshot.board.feature.title,
+        snapshot.board.feature.problem,
+      ].join("\n").toLowerCase();
+      return haystack.includes(query);
+    });
+  }, [boardSearchQuery, sortedBoardSnapshots]);
 
   useEffect(() => {
     window.localStorage.setItem(LOCALE_KEY, locale);
@@ -1268,12 +1286,7 @@ export function OrchestraBoard() {
     setExecutionStage("preview");
   }
 
-  function handleSwitchBoardSnapshot(snapshotId: string) {
-    const snapshot = boardSnapshots.find((candidate) => candidate.id === snapshotId);
-    if (!snapshot) {
-      return;
-    }
-
+  function hydrateFromSnapshot(snapshot: OrchestraBoardSnapshot) {
     setActiveBoardId(snapshot.id);
     setBoard(snapshot.board);
     setSelectedTaskId(snapshot.selectedTaskId || snapshot.board.tasks[0]?.id || "");
@@ -1286,10 +1299,20 @@ export function OrchestraBoard() {
     setProblem(snapshot.board.feature.problem);
     setGoals(snapshot.board.feature.goals.join("\n"));
     setConstraints(snapshot.board.feature.constraints.join("\n"));
+    setBoardNameDraft(snapshot.name);
     setPacket(null);
     setRunResult(null);
     setExpandedRunId(null);
     setInspectorTab("task");
+  }
+
+  function handleSwitchBoardSnapshot(snapshotId: string) {
+    const snapshot = boardSnapshots.find((candidate) => candidate.id === snapshotId);
+    if (!snapshot) {
+      return;
+    }
+
+    hydrateFromSnapshot(snapshot);
   }
 
   function handleCreateBoardSnapshot() {
@@ -1316,6 +1339,7 @@ export function OrchestraBoard() {
     setActiveBoardId(nextBoardId);
     setBoard(nextBoard);
     setSelectedTaskId(nextBoard.tasks[0]?.id ?? "");
+    setBoardNameDraft(nextSnapshot.name);
     setRunHistory([]);
     setBatchSummaries([]);
     setTimeline([]);
@@ -1324,6 +1348,60 @@ export function OrchestraBoard() {
     setRunResult(null);
     setExpandedRunId(null);
     setInspectorTab("task");
+  }
+
+  function handleRenameBoard() {
+    const nextName = boardNameDraft.trim();
+    if (!nextName) {
+      return;
+    }
+
+    setBoardSnapshots((current) => current.map((snapshot) => (
+      snapshot.id === activeBoardId
+        ? { ...snapshot, name: nextName, updatedAt: new Date().toISOString() }
+        : snapshot
+    )));
+    setBoardNameDraft(nextName);
+  }
+
+  function handleDuplicateBoard(snapshotId: string) {
+    const snapshot = boardSnapshots.find((candidate) => candidate.id === snapshotId);
+    if (!snapshot) {
+      return;
+    }
+
+    const duplicate = createBoardSnapshot({
+      id: createWorkspaceBoardId(),
+      name: locale === "zh" ? `${snapshot.name} 副本` : `${snapshot.name} Copy`,
+      template: snapshot.template,
+      board: snapshot.board,
+      selectedTaskId: snapshot.selectedTaskId,
+      runHistory: snapshot.runHistory,
+      batchSummaries: normalizeBatchSummaries(snapshot.batchSummaries),
+      timeline: snapshot.timeline,
+      selectedCommandTaskIds: snapshot.selectedCommandTaskIds,
+    });
+
+    setBoardSnapshots((current) => [duplicate, ...current]);
+    hydrateFromSnapshot(duplicate);
+  }
+
+  function handleDeleteBoard(snapshotId: string) {
+    if (boardSnapshots.length <= 1) {
+      return;
+    }
+
+    const nextSnapshots = boardSnapshots.filter((snapshot) => snapshot.id !== snapshotId);
+    setBoardSnapshots(nextSnapshots);
+
+    if (snapshotId !== activeBoardId) {
+      return;
+    }
+
+    const fallbackSnapshot = nextSnapshots[0];
+    if (fallbackSnapshot) {
+      hydrateFromSnapshot(fallbackSnapshot);
+    }
   }
 
   function handleGenerateHandoff(task: OrchestraTask) {
@@ -1748,6 +1826,110 @@ export function OrchestraBoard() {
                 <Plus className="h-4 w-4" />
                 {locale === "zh" ? "另存为新 Board" : "Save As New Board"}
               </Button>
+            </div>
+
+            <div className="rounded-[20px] border border-slate-200/80 bg-slate-50/80 p-3">
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                <div className="flex min-w-0 flex-1 items-center gap-2 rounded-full border border-slate-200 bg-white px-3">
+                  <Search className="h-4 w-4 text-slate-400" />
+                  <Input
+                    value={boardSearchQuery}
+                    onChange={(event) => setBoardSearchQuery(event.target.value)}
+                    placeholder={locale === "zh" ? "搜索 board 名称或 brief" : "Search boards or briefs"}
+                    className="h-9 border-0 bg-transparent px-0 shadow-none focus-visible:ring-0"
+                  />
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Input
+                    value={boardNameDraft}
+                    onChange={(event) => setBoardNameDraft(event.target.value)}
+                    className="h-9 w-full min-w-[220px] rounded-full border-slate-200 bg-white lg:w-[260px]"
+                    placeholder={locale === "zh" ? "当前 board 名称" : "Current board name"}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="rounded-full border-slate-200 bg-white"
+                    onClick={handleRenameBoard}
+                  >
+                    {locale === "zh" ? "重命名" : "Rename"}
+                  </Button>
+                </div>
+              </div>
+
+              <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+                {visibleBoardSnapshots.map((snapshot) => (
+                  <div
+                    key={snapshot.id}
+                    className={cn(
+                      "rounded-2xl border px-3 py-3 transition-colors",
+                      snapshot.id === activeBoardId
+                        ? "border-slate-950 bg-white shadow-sm"
+                        : "border-slate-200 bg-white/80",
+                    )}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => handleSwitchBoardSnapshot(snapshot.id)}
+                      className="w-full text-left"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="truncate text-sm font-semibold text-slate-950">
+                            {snapshot.name}
+                          </div>
+                          <div className="mt-1 line-clamp-2 text-xs leading-5 text-slate-500">
+                            {snapshot.board.feature.problem}
+                          </div>
+                        </div>
+                        <Badge
+                          variant="outline"
+                          className={cn(
+                            "shrink-0 rounded-full",
+                            snapshot.id === activeBoardId
+                              ? "border-slate-950 text-slate-950"
+                              : "border-slate-300 text-slate-500",
+                          )}
+                        >
+                          {snapshot.board.tasks.length}
+                        </Badge>
+                      </div>
+                    </button>
+                    <div className="mt-3 flex items-center justify-between gap-2 text-xs text-slate-500">
+                      <span>
+                        {locale === "zh" ? "更新于" : "Updated"} {snapshot.updatedAt.slice(0, 10)}
+                      </span>
+                      <div className="flex items-center gap-1">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 rounded-full text-slate-500"
+                          onClick={() => handleDuplicateBoard(snapshot.id)}
+                        >
+                          <Copy className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 rounded-full text-slate-500"
+                          onClick={() => handleDeleteBoard(snapshot.id)}
+                          disabled={boardSnapshots.length <= 1}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {!visibleBoardSnapshots.length ? (
+                <div className="mt-3 rounded-2xl border border-dashed border-slate-200 bg-white/70 px-4 py-5 text-sm text-slate-500">
+                  {locale === "zh" ? "没有匹配的 board，试试清空搜索或另存一个新的。" : "No matching boards. Clear the search or save a new board."}
+                </div>
+              ) : null}
             </div>
 
             <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
