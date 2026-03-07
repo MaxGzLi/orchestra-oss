@@ -43,6 +43,15 @@ import type {
 type Locale = "zh" | "en";
 type BatchStrategy = "manual" | "dependency" | "owner" | "priority";
 type QuickFilter = "all" | "ready" | "blocked" | "critical";
+type BatchRunSummary = {
+  id: string;
+  createdAt: string;
+  strategy: BatchStrategy;
+  total: number;
+  succeeded: number;
+  failed: number;
+  taskIds: string[];
+};
 type DemoResult = {
   executor: OrchestraExecutor;
   mode: "dry_run";
@@ -761,6 +770,7 @@ export function OrchestraBoard() {
   const [packet, setPacket] = useState<CommandPacket | null>(null);
   const [runResult, setRunResult] = useState<DemoResult | null>(null);
   const [runHistory, setRunHistory] = useState<OrchestraRunRecord[]>([]);
+  const [batchSummaries, setBatchSummaries] = useState<BatchRunSummary[]>([]);
   const [timeline, setTimeline] = useState<OrchestraTimelineEvent[]>([]);
   const [expandedRunId, setExpandedRunId] = useState<string | null>(null);
   const [selectedScenarioId, setSelectedScenarioId] = useState<string>(orchestraScenarios[0]?.id ?? "");
@@ -848,6 +858,7 @@ export function OrchestraBoard() {
           board: OrchestraBoard;
           selectedTaskId: string;
           runHistory: OrchestraRunRecord[];
+          batchSummaries?: BatchRunSummary[];
           timeline: OrchestraTimelineEvent[];
           selectedCommandTaskIds?: string[];
           batchStrategy?: BatchStrategy;
@@ -857,6 +868,7 @@ export function OrchestraBoard() {
         setBoard(normalizedBoard);
         setSelectedTaskId(parsed.selectedTaskId || normalizedBoard.tasks[0]?.id || "");
         setRunHistory(parsed.runHistory ?? []);
+        setBatchSummaries(parsed.batchSummaries ?? []);
         setTimeline(parsed.timeline ?? []);
         setSelectedCommandTaskIds(parsed.selectedCommandTaskIds ?? []);
         setBatchStrategy(parsed.batchStrategy ?? "manual");
@@ -884,12 +896,13 @@ export function OrchestraBoard() {
         board,
         selectedTaskId,
         runHistory,
+        batchSummaries,
         timeline,
         selectedCommandTaskIds,
         batchStrategy,
       }),
     );
-  }, [batchStrategy, board, selectedTaskId, runHistory, timeline, selectedCommandTaskIds]);
+  }, [batchStrategy, batchSummaries, board, selectedTaskId, runHistory, timeline, selectedCommandTaskIds]);
 
   function handleGeneratePlan() {
     const idea: OrchestraFeatureIdea = {
@@ -907,6 +920,7 @@ export function OrchestraBoard() {
     setPacket(null);
     setRunResult(null);
     setRunHistory([]);
+    setBatchSummaries([]);
     setTimeline([]);
     setSelectedCommandTaskIds([]);
     setBatchStrategy("manual");
@@ -925,6 +939,7 @@ export function OrchestraBoard() {
     setPacket(null);
     setRunResult(null);
     setRunHistory([]);
+    setBatchSummaries([]);
     setTimeline([]);
     setSelectedCommandTaskIds([]);
     setBatchStrategy("manual");
@@ -941,6 +956,7 @@ export function OrchestraBoard() {
     setPacket(null);
     setRunResult(null);
     setRunHistory([]);
+    setBatchSummaries([]);
     setTimeline([]);
     setSelectedScenarioId(orchestraScenarios[0]?.id ?? "");
     setSelectedCommandTaskIds([]);
@@ -1017,6 +1033,15 @@ export function OrchestraBoard() {
       ...buildRunRecord(task.id, result),
       status,
     }));
+    const batchSummary: BatchRunSummary = {
+      id: `batch-${Date.now()}`,
+      createdAt: new Date().toISOString(),
+      strategy: batchStrategy,
+      total: executionLog.length,
+      succeeded: executionLog.filter((item) => item.status === "succeeded").length,
+      failed: executionLog.filter((item) => item.status === "failed").length,
+      taskIds: executionLog.map((item) => item.task.id),
+    };
     const nextTimeline = executionLog.flatMap(({ task, result }, index) => {
       const runId = records[index].id;
       if (records[index].status === "failed") {
@@ -1056,6 +1081,7 @@ export function OrchestraBoard() {
       durationMs: executionLog.reduce((sum, item) => sum + item.result.durationMs, 0),
     });
     setRunHistory((current) => [...records.reverse(), ...current].slice(0, 20));
+    setBatchSummaries((current) => [batchSummary, ...current].slice(0, 10));
     setTimeline((current) => [...nextTimeline.reverse(), ...current].slice(0, 80));
     setBoard((current) => ({
       ...current,
@@ -2286,17 +2312,99 @@ export function OrchestraBoard() {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
+              {batchSummaries.length ? (
+                <div className="space-y-3">
+                  <div className="text-xs uppercase tracking-[0.18em] text-slate-500">
+                    {locale === "zh" ? "Batch 摘要" : "Batch Summaries"}
+                  </div>
+                  {batchSummaries.map((summary) => (
+                    <div key={summary.id} className="rounded-2xl border border-slate-200 bg-[linear-gradient(180deg,_#ffffff_0%,_#fbfdff_100%)] p-4">
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <div className="text-sm font-medium text-slate-900">
+                            {locale === "zh"
+                              ? `${summary.total} 个任务批次`
+                              : `${summary.total}-task batch`}
+                          </div>
+                          <p className="mt-1 text-xs text-slate-500">
+                            {new Date(summary.createdAt).toLocaleString()} · {batchStrategyLabel[locale][summary.strategy]}
+                          </p>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <Badge className="rounded-full border border-emerald-200 bg-emerald-50 text-emerald-700">
+                            {locale === "zh" ? `成功 ${summary.succeeded}` : `Succeeded ${summary.succeeded}`}
+                          </Badge>
+                          <Badge className="rounded-full border border-rose-200 bg-rose-50 text-rose-700">
+                            {locale === "zh" ? `跳过 ${summary.failed}` : `Skipped ${summary.failed}`}
+                          </Badge>
+                        </div>
+                      </div>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {summary.taskIds.map((taskId) => {
+                          const task = board.tasks.find((candidate) => candidate.id === taskId);
+                          return (
+                            <button
+                              key={taskId}
+                              type="button"
+                              onClick={() => task && setSelectedTaskId(task.id)}
+                              className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-600 transition-colors hover:border-slate-300 hover:text-slate-900"
+                            >
+                              {task ? translateTask(task, locale).title : taskId}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
               {runHistory.length ? runHistory.map((record) => (
                 <div key={record.id} className="rounded-2xl border border-slate-200 bg-[linear-gradient(180deg,_#ffffff_0%,_#fbfdff_100%)] p-4">
                   <div className="flex items-center justify-between gap-3">
                     <div>
-                      <div className="text-sm font-medium text-slate-900">{record.taskId}</div>
+                      <div className="text-sm font-medium text-slate-900">
+                        {translateTask(board.tasks.find((task) => task.id === record.taskId) ?? {
+                          id: record.taskId,
+                          title: record.taskId,
+                          summary: "",
+                          state: "ready",
+                          kind: "implementation",
+                          priority: "medium",
+                          owner: record.executor,
+                          dependsOn: [],
+                          acceptance: [],
+                          lane: "execution",
+                          comments: [],
+                        }, locale).title}
+                      </div>
                       <p className="mt-1 text-xs text-slate-500">{new Date(record.createdAt).toLocaleString()} · {locale === "zh" ? "演练模式" : "dry_run"} · {record.durationMs}ms</p>
                     </div>
-                    <Badge className={cn("rounded-full", ownerTone[record.executor])}>{ownerLabel(record.executor, locale)}</Badge>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge className={cn("rounded-full", ownerTone[record.executor])}>{ownerLabel(record.executor, locale)}</Badge>
+                      <Badge
+                        className={cn(
+                          "rounded-full border",
+                          record.status === "succeeded"
+                            ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                            : "border-rose-200 bg-rose-50 text-rose-700",
+                        )}
+                      >
+                        {record.status === "succeeded"
+                          ? (locale === "zh" ? "成功" : "Succeeded")
+                          : (locale === "zh" ? "跳过" : "Skipped")}
+                      </Badge>
+                    </div>
                   </div>
                   <pre className="mt-3 max-h-28 overflow-auto whitespace-pre-wrap text-xs leading-5 text-slate-600"><code>{record.command} {record.args.join(" ")}</code></pre>
-                  <div className="mt-3 flex items-center justify-end">
+                  <div className="mt-3 flex items-center justify-between gap-3">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="rounded-full border border-transparent hover:border-slate-200 hover:bg-slate-50"
+                      onClick={() => setSelectedTaskId(record.taskId)}
+                    >
+                      {locale === "zh" ? "定位任务" : "Open Task"}
+                    </Button>
                     <Button variant="ghost" size="sm" className="rounded-full border border-transparent hover:border-slate-200 hover:bg-slate-50" onClick={() => setExpandedRunId((current) => current === record.id ? null : record.id)}>
                       {expandedRunId === record.id ? (locale === "zh" ? "收起详情" : "Hide Details") : (locale === "zh" ? "查看详情" : "Show Details")}
                     </Button>
