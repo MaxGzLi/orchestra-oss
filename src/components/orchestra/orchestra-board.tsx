@@ -76,6 +76,7 @@ type DispatchQueueItem = {
   owner: OrchestraExecutor;
   priority: OrchestraTaskPriority;
 };
+type DispatchQueueStrategy = "board" | "owner" | "priority";
 
 const LOCALE_KEY = "orchestra-oss-locale";
 const STATE_KEY = "orchestra-oss-state";
@@ -872,6 +873,7 @@ export function OrchestraBoard() {
   const [boardSearchQuery, setBoardSearchQuery] = useState("");
   const [boardNameDraft, setBoardNameDraft] = useState(defaultBoard.feature.title);
   const [dispatchQueue, setDispatchQueue] = useState<DispatchQueueItem[]>([]);
+  const [dispatchStrategy, setDispatchStrategy] = useState<DispatchQueueStrategy>("board");
   const [searchQuery, setSearchQuery] = useState("");
   const [quickFilter, setQuickFilter] = useState<QuickFilter>("all");
   const [laneFilter, setLaneFilter] = useState<OrchestraTask["lane"] | "all">("all");
@@ -1077,6 +1079,7 @@ export function OrchestraBoard() {
           timeline?: OrchestraTimelineEvent[];
           selectedCommandTaskIds?: string[];
           dispatchQueue?: DispatchQueueItem[];
+          dispatchStrategy?: DispatchQueueStrategy;
           selectedTemplateId?: OrchestraTemplateId;
           batchStrategy?: BatchStrategy;
           adapterMode?: ExecutorAdapterMode;
@@ -1127,6 +1130,7 @@ export function OrchestraBoard() {
         }
 
         setDispatchQueue(parsed.dispatchQueue ?? []);
+        setDispatchStrategy(parsed.dispatchStrategy ?? "board");
         setBatchStrategy(parsed.batchStrategy ?? "manual");
         setAdapterMode(parsed.adapterMode ?? "simulated-local");
         setExecutionStage(parsed.executionStage ?? "preview");
@@ -1276,18 +1280,44 @@ export function OrchestraBoard() {
     };
   }, [boardSnapshots]);
   const nextDispatchTarget = useMemo(() => {
-    const first = dispatchQueue[0];
+    const priorityScore: Record<OrchestraTaskPriority, number> = {
+      low: 1,
+      medium: 2,
+      high: 3,
+      critical: 4,
+    };
+    if (!dispatchQueue.length) {
+      return null;
+    }
+
+    const orderedQueue = [...dispatchQueue].sort((left, right) => {
+      if (dispatchStrategy === "priority") {
+        return priorityScore[right.priority] - priorityScore[left.priority];
+      }
+      if (dispatchStrategy === "owner") {
+        return left.owner.localeCompare(right.owner) || left.boardName.localeCompare(right.boardName);
+      }
+      return left.boardName.localeCompare(right.boardName);
+    });
+
+    const first = orderedQueue[0];
     if (!first) {
       return null;
     }
 
-    const queuedForBoard = dispatchQueue.filter((item) => item.boardId === first.boardId);
+    const items = orderedQueue.filter((item) => (
+      dispatchStrategy === "owner" ? item.owner === first.owner : item.boardId === first.boardId
+    ));
+
     return {
+      strategy: dispatchStrategy,
       boardId: first.boardId,
       boardName: first.boardName,
-      items: queuedForBoard,
+      owner: first.owner,
+      items,
+      orderedQueue,
     };
-  }, [dispatchQueue]);
+  }, [dispatchQueue, dispatchStrategy]);
 
   useEffect(() => {
     window.localStorage.setItem(LOCALE_KEY, locale);
@@ -1349,6 +1379,7 @@ export function OrchestraBoard() {
         activeBoardId,
         boards: boardSnapshots,
         dispatchQueue,
+        dispatchStrategy,
         selectedTemplateId,
         batchStrategy,
         adapterMode,
@@ -1356,7 +1387,7 @@ export function OrchestraBoard() {
         commandTemplates,
       }),
     );
-  }, [activeBoardId, adapterMode, batchStrategy, boardSnapshots, commandTemplates, dispatchQueue, executionStage, selectedTemplateId]);
+  }, [activeBoardId, adapterMode, batchStrategy, boardSnapshots, commandTemplates, dispatchQueue, dispatchStrategy, executionStage, selectedTemplateId]);
 
   function handleGeneratePlan() {
     const idea: OrchestraFeatureIdea = {
@@ -1511,7 +1542,13 @@ export function OrchestraBoard() {
       return;
     }
 
-    const taskIds = nextDispatchTarget.items
+    const queueItems = nextDispatchTarget.strategy === "priority"
+      ? nextDispatchTarget.orderedQueue
+        .filter((item) => item.boardId === nextDispatchTarget.boardId)
+        .slice(0, 5)
+      : nextDispatchTarget.items;
+
+    const taskIds = queueItems
       .map((item) => item.taskId)
       .filter((taskId) => snapshot.board.tasks.some((task) => task.id === taskId));
     const leadTask = snapshot.board.tasks.find((task) => task.id === taskIds[0]);
@@ -1525,7 +1562,7 @@ export function OrchestraBoard() {
       setPacket(buildCommandPacket(snapshot.board.feature, leadTask, leadTask.owner, commandTemplates));
     }
     setInspectorTab("batch");
-    setDispatchQueue((current) => current.filter((item) => item.boardId !== nextDispatchTarget.boardId));
+    setDispatchQueue((current) => current.filter((item) => !queueItems.some((queued) => queued.boardId === item.boardId && queued.taskId === item.taskId)));
   }
 
   function handleCreateBoardSnapshot() {
@@ -2288,6 +2325,15 @@ export function OrchestraBoard() {
                   </div>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
+                  <select
+                    value={dispatchStrategy}
+                    onChange={(event) => setDispatchStrategy(event.target.value as DispatchQueueStrategy)}
+                    className="rounded-full border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm outline-none focus:border-slate-300"
+                  >
+                    <option value="board">{locale === "zh" ? "按 board 装载" : "Load by board"}</option>
+                    <option value="owner">{locale === "zh" ? "按执行者装载" : "Load by executor"}</option>
+                    <option value="priority">{locale === "zh" ? "按优先级装载" : "Load by priority"}</option>
+                  </select>
                   <Button
                     type="button"
                     variant="outline"
@@ -2309,6 +2355,21 @@ export function OrchestraBoard() {
                   </Button>
                 </div>
               </div>
+              {nextDispatchTarget ? (
+                <div className="mt-3 rounded-2xl border border-slate-200 bg-white/80 px-4 py-3 text-sm text-slate-600">
+                  {nextDispatchTarget.strategy === "owner"
+                    ? (locale === "zh"
+                      ? `下一批将按执行者 ${nextDispatchTarget.owner} 装载 ${nextDispatchTarget.items.length} 个任务。`
+                      : `Next load will group ${nextDispatchTarget.items.length} tasks for ${nextDispatchTarget.owner}.`)
+                    : nextDispatchTarget.strategy === "priority"
+                      ? (locale === "zh"
+                        ? `下一批将从 ${nextDispatchTarget.boardName} 装载最高优先级任务。`
+                        : `Next load will take the highest-priority tasks from ${nextDispatchTarget.boardName}.`)
+                      : (locale === "zh"
+                        ? `下一批将装载 ${nextDispatchTarget.boardName} 的 ${nextDispatchTarget.items.length} 个任务。`
+                        : `Next load will take ${nextDispatchTarget.items.length} tasks from ${nextDispatchTarget.boardName}.`)}
+                </div>
+              ) : null}
               <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
                 {dispatchQueue.map((item) => (
                   <div
