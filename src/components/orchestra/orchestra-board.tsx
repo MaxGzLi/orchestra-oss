@@ -893,6 +893,19 @@ export function OrchestraBoard() {
     () => orderedCommandTasks.map((task) => buildCommandPacket(board.feature, task, task.owner, commandTemplates)),
     [board.feature, commandTemplates, orderedCommandTasks],
   );
+  const runnableVisibleTaskIds = useMemo(
+    () =>
+      visibleTasks
+        .filter((task) =>
+          task.state === "ready" &&
+          task.dependsOn.every((dependencyId) => {
+            const dependency = board.tasks.find((candidate) => candidate.id === dependencyId);
+            return dependency?.state === "done";
+          }),
+        )
+        .map((task) => task.id),
+    [board.tasks, visibleTasks],
+  );
   const runnableTaskCount = useMemo(
     () =>
       orderedCommandTasks.filter((task) =>
@@ -1251,6 +1264,25 @@ export function OrchestraBoard() {
     setSelectedCommandTaskIds((current) => (
       checked ? [...new Set([...current, taskId])] : current.filter((id) => id !== taskId)
     ));
+  }
+
+  function handleSelectRunnableTasks() {
+    setSelectedCommandTaskIds(runnableVisibleTaskIds);
+    setInspectorTab("batch");
+  }
+
+  function handleClearTaskSelection() {
+    setSelectedCommandTaskIds([]);
+    setPacket(null);
+    setRunResult(null);
+  }
+
+  function handleSelectLaneTasks(lane: OrchestraTask["lane"]) {
+    const laneTaskIds = visibleTasks.filter((task) => task.lane === lane).map((task) => task.id);
+    setSelectedCommandTaskIds(laneTaskIds);
+    if (laneTaskIds.length) {
+      setInspectorTab("batch");
+    }
   }
 
   function handleAddComment() {
@@ -1677,6 +1709,26 @@ export function OrchestraBoard() {
                     </button>
                   ))}
                 </div>
+                <div className="ml-auto flex flex-wrap gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="rounded-full border-slate-200 bg-white"
+                    onClick={handleSelectRunnableTasks}
+                    disabled={!runnableVisibleTaskIds.length}
+                  >
+                    {locale === "zh" ? "选择可执行任务" : "Select Runnable"}
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="rounded-full"
+                    onClick={handleClearTaskSelection}
+                    disabled={!selectedCommandTaskIds.length}
+                  >
+                    {locale === "zh" ? "清空勾选" : "Clear Selection"}
+                  </Button>
+                </div>
               </div>
             </div>
             <div className="grid gap-4 xl:grid-cols-2">
@@ -1709,6 +1761,15 @@ export function OrchestraBoard() {
                     <div className="rounded-full bg-white/90 px-2.5 py-1 text-xs text-slate-600 shadow-sm">
                       {locale === "zh" ? `总计 ${tasks.length}` : `Total ${tasks.length}`}
                     </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 rounded-full bg-white/90 px-3 text-xs text-slate-600 hover:bg-white"
+                      onClick={() => handleSelectLaneTasks(lane)}
+                      disabled={!tasks.length}
+                    >
+                      {locale === "zh" ? "选中本列" : "Select Lane"}
+                    </Button>
                   </div>
                 </div>
                 <div
@@ -2417,6 +2478,15 @@ export function OrchestraBoard() {
                       disabled={!commandTasks.length}
                     >
                       {locale === "zh" ? "生成交接包" : "Generate Handoff"}
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="rounded-full"
+                      onClick={handleClearTaskSelection}
+                      disabled={!commandTasks.length}
+                    >
+                      {locale === "zh" ? "清空批次" : "Clear Batch"}
                     </Button>
                   </div>
                 </div>
