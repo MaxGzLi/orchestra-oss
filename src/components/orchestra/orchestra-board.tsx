@@ -14,6 +14,7 @@ import {
   Lightbulb,
   GripVertical,
   Plus,
+  Search,
   Sparkles,
   Trash2,
 } from "lucide-react";
@@ -41,6 +42,7 @@ import type {
 
 type Locale = "zh" | "en";
 type BatchStrategy = "manual" | "dependency" | "owner" | "priority";
+type QuickFilter = "all" | "ready" | "blocked" | "critical";
 type DemoResult = {
   executor: OrchestraExecutor;
   mode: "dry_run";
@@ -70,6 +72,21 @@ const batchStrategyLabel: Record<Locale, Record<BatchStrategy, string>> = {
     dependency: "Dependencies",
     owner: "Executor",
     priority: "Priority",
+  },
+};
+
+const quickFilterLabel: Record<Locale, Record<QuickFilter, string>> = {
+  zh: {
+    all: "全部",
+    ready: "就绪",
+    blocked: "阻塞",
+    critical: "最高优先级",
+  },
+  en: {
+    all: "All",
+    ready: "Ready",
+    blocked: "Blocked",
+    critical: "Critical",
   },
 };
 
@@ -715,6 +732,23 @@ function buildPortfolioSignals(board: OrchestraBoard, locale: Locale) {
   ];
 }
 
+function matchesTaskSearch(task: OrchestraTask, query: string) {
+  if (!query) {
+    return true;
+  }
+
+  const haystack = [
+    task.title,
+    task.summary,
+    ...task.acceptance,
+    ...task.comments.map((comment) => comment.body),
+  ]
+    .join("\n")
+    .toLowerCase();
+
+  return haystack.includes(query.toLowerCase());
+}
+
 export function OrchestraBoard() {
   const defaultBoard = getDefaultOrchestraBoard();
   const [locale, setLocale] = useState<Locale>(getInitialLocale);
@@ -730,6 +764,12 @@ export function OrchestraBoard() {
   const [timeline, setTimeline] = useState<OrchestraTimelineEvent[]>([]);
   const [expandedRunId, setExpandedRunId] = useState<string | null>(null);
   const [selectedScenarioId, setSelectedScenarioId] = useState<string>(orchestraScenarios[0]?.id ?? "");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [quickFilter, setQuickFilter] = useState<QuickFilter>("all");
+  const [laneFilter, setLaneFilter] = useState<OrchestraTask["lane"] | "all">("all");
+  const [stateFilter, setStateFilter] = useState<OrchestraTaskState | "all">("all");
+  const [ownerFilter, setOwnerFilter] = useState<OrchestraExecutor | "all">("all");
+  const [priorityFilter, setPriorityFilter] = useState<OrchestraTaskPriority | "all">("all");
   const [selectedCommandTaskIds, setSelectedCommandTaskIds] = useState<string[]>([]);
   const [batchStrategy, setBatchStrategy] = useState<BatchStrategy>("manual");
   const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
@@ -745,9 +785,33 @@ export function OrchestraBoard() {
 
   const taskCounts = useMemo(() => summarizeByOwner(board.tasks), [board.tasks]);
   const portfolioSignals = useMemo(() => buildPortfolioSignals(board, locale), [board, locale]);
+  const visibleTasks = useMemo(() => board.tasks.filter((task) => {
+    if (quickFilter === "ready" && task.state !== "ready") {
+      return false;
+    }
+    if (quickFilter === "blocked" && task.state !== "blocked") {
+      return false;
+    }
+    if (quickFilter === "critical" && task.priority !== "critical") {
+      return false;
+    }
+    if (laneFilter !== "all" && task.lane !== laneFilter) {
+      return false;
+    }
+    if (stateFilter !== "all" && task.state !== stateFilter) {
+      return false;
+    }
+    if (ownerFilter !== "all" && task.owner !== ownerFilter) {
+      return false;
+    }
+    if (priorityFilter !== "all" && task.priority !== priorityFilter) {
+      return false;
+    }
+    return matchesTaskSearch(task, searchQuery);
+  }), [board.tasks, laneFilter, ownerFilter, priorityFilter, quickFilter, searchQuery, stateFilter]);
   const laneMap = useMemo(
-    () => laneOrder.map((lane) => ({ lane, tasks: board.tasks.filter((task) => task.lane === lane) })),
-    [board.tasks],
+    () => laneOrder.map((lane) => ({ lane, tasks: visibleTasks.filter((task) => task.lane === lane) })),
+    [visibleTasks],
   );
   const selectedTask = useMemo(
     () => board.tasks.find((task) => task.id === selectedTaskId) ?? board.tasks[0] ?? null,
@@ -1190,7 +1254,7 @@ export function OrchestraBoard() {
             </div>
           </div>
           <div className="grid min-w-[280px] grid-cols-3 gap-3">
-            <MetricCard icon={Clipboard} label={locale === "zh" ? "任务数" : "Tasks"} value={String(board.tasks.length)} />
+            <MetricCard icon={Clipboard} label={locale === "zh" ? "任务数" : "Tasks"} value={`${visibleTasks.length}/${board.tasks.length}`} />
             <MetricCard icon={Cpu} label={locale === "zh" ? "进行中" : "In Flight"} value={String(board.tasks.filter((task) => task.state === "in_progress" || task.state === "review").length)} />
             <MetricCard icon={CheckCircle2} label={locale === "zh" ? "已完成" : "Done"} value={String(board.tasks.filter((task) => task.state === "done").length)} />
           </div>
@@ -1382,7 +1446,118 @@ export function OrchestraBoard() {
                 : "Tasks are grouped by the feature delivery flow instead of a generic kanban."}
             </CardDescription>
           </CardHeader>
-          <CardContent className="grid gap-4 xl:grid-cols-2">
+          <CardContent className="space-y-4">
+            <div className="rounded-[26px] border border-slate-200 bg-slate-50/80 p-4">
+              <div className="grid gap-3 xl:grid-cols-[1.2fr_repeat(4,minmax(0,1fr))]">
+                <label className="grid gap-2 text-sm xl:col-span-1">
+                  <span className="font-medium text-slate-700">{locale === "zh" ? "搜索任务" : "Search"}</span>
+                  <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-sm">
+                    <Search className="h-4 w-4 text-slate-400" />
+                    <input
+                      value={searchQuery}
+                      onChange={(event) => setSearchQuery(event.target.value)}
+                      placeholder={locale === "zh" ? "标题、摘要、评论、验收标准" : "Title, summary, comments, acceptance"}
+                      className="w-full bg-transparent text-sm text-slate-700 outline-none"
+                    />
+                  </div>
+                </label>
+                <label className="grid gap-2 text-sm">
+                  <span className="font-medium text-slate-700">{locale === "zh" ? "状态" : "State"}</span>
+                  <select
+                    value={stateFilter}
+                    onChange={(event) => setStateFilter(event.target.value as OrchestraTaskState | "all")}
+                    className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm outline-none focus:border-slate-300"
+                  >
+                    <option value="all">{locale === "zh" ? "全部状态" : "All states"}</option>
+                    {(Object.keys(statusLabel.en) as OrchestraTaskState[]).map((state) => (
+                      <option key={state} value={state}>
+                        {statusLabel[locale][state]}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="grid gap-2 text-sm">
+                  <span className="font-medium text-slate-700">{locale === "zh" ? "归属" : "Owner"}</span>
+                  <select
+                    value={ownerFilter}
+                    onChange={(event) => setOwnerFilter(event.target.value as OrchestraExecutor | "all")}
+                    className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm outline-none focus:border-slate-300"
+                  >
+                    <option value="all">{locale === "zh" ? "全部归属" : "All owners"}</option>
+                    {(["planner", "commander", "codex", "claude_code", "portfolio", "human"] as OrchestraExecutor[]).map((owner) => (
+                      <option key={owner} value={owner}>
+                        {ownerLabel(owner, locale)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="grid gap-2 text-sm">
+                  <span className="font-medium text-slate-700">{locale === "zh" ? "优先级" : "Priority"}</span>
+                  <select
+                    value={priorityFilter}
+                    onChange={(event) => setPriorityFilter(event.target.value as OrchestraTaskPriority | "all")}
+                    className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm outline-none focus:border-slate-300"
+                  >
+                    <option value="all">{locale === "zh" ? "全部优先级" : "All priorities"}</option>
+                    {(["low", "medium", "high", "critical"] as OrchestraTaskPriority[]).map((priority) => (
+                      <option key={priority} value={priority}>
+                        {priorityLabel[locale][priority]}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="grid gap-2 text-sm">
+                  <span className="font-medium text-slate-700">{locale === "zh" ? "泳道" : "Lane"}</span>
+                  <select
+                    value={laneFilter}
+                    onChange={(event) => setLaneFilter(event.target.value as OrchestraTask["lane"] | "all")}
+                    className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm outline-none focus:border-slate-300"
+                  >
+                    <option value="all">{locale === "zh" ? "全部泳道" : "All lanes"}</option>
+                    {laneOrder.map((lane) => (
+                      <option key={lane} value={lane}>
+                        {laneLabels[locale][lane]}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+              <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+                <div className="flex flex-wrap gap-2">
+                  {(["all", "ready", "blocked", "critical"] as QuickFilter[]).map((filter) => (
+                    <button
+                      key={filter}
+                      type="button"
+                      onClick={() => setQuickFilter(filter)}
+                      className={cn(
+                        "rounded-full border px-3 py-1.5 text-xs transition-colors",
+                        quickFilter === filter
+                          ? "border-slate-950 bg-slate-950 text-white"
+                          : "border-slate-200 bg-white text-slate-600",
+                      )}
+                    >
+                      {quickFilterLabel[locale][filter]}
+                    </button>
+                  ))}
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="rounded-full"
+                  onClick={() => {
+                    setSearchQuery("");
+                    setQuickFilter("all");
+                    setLaneFilter("all");
+                    setStateFilter("all");
+                    setOwnerFilter("all");
+                    setPriorityFilter("all");
+                  }}
+                >
+                  {locale === "zh" ? "清空筛选" : "Clear Filters"}
+                </Button>
+              </div>
+            </div>
+            <div className="grid gap-4 xl:grid-cols-2">
             {laneMap.map(({ lane, tasks }) => (
               <div
                 key={lane}
@@ -1510,6 +1685,14 @@ export function OrchestraBoard() {
                 </div>
               </div>
             ))}
+            </div>
+            {!visibleTasks.length ? (
+              <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-6 text-sm leading-6 text-slate-600">
+                {locale === "zh"
+                  ? "当前筛选条件下没有任务。你可以清空筛选，或者创建一个新任务。"
+                  : "No tasks match the current filters. Clear the filters or create a new task."}
+              </div>
+            ) : null}
           </CardContent>
         </Card>
 
