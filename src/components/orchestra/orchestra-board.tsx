@@ -25,6 +25,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { buildCommandPacket, type CommandPacket } from "@/lib/orchestra/commander";
 import { getDefaultOrchestraBoard, orchestraAgents, orchestraScenarios } from "@/lib/orchestra/data";
+import { runBatchWithAdapter, simulatedExecutorAdapter, type ExecutorRunResult } from "@/lib/orchestra/executor";
 import { buildBoardFromIdea, summarizeByOwner } from "@/lib/orchestra/planner";
 import { cn } from "@/lib/utils";
 import type {
@@ -52,14 +53,7 @@ type BatchRunSummary = {
   failed: number;
   taskIds: string[];
 };
-type DemoResult = {
-  executor: OrchestraExecutor;
-  mode: "dry_run";
-  command: string;
-  stdout: string;
-  stderr: string;
-  durationMs: number;
-};
+type DemoResult = ExecutorRunResult;
 
 const LOCALE_KEY = "orchestra-oss-locale";
 const STATE_KEY = "orchestra-oss-state";
@@ -391,21 +385,6 @@ function timelineLabel(type: OrchestraTimelineEvent["eventType"], locale: Locale
   }
 }
 
-function buildDemoResult(packet: CommandPacket): DemoResult {
-  return {
-    executor: packet.executor,
-    mode: "dry_run",
-    command: packet.suggestedCommand,
-    stdout: [
-      `Simulated ${packet.executor} handoff.`,
-      `Objective: ${packet.objective}`,
-      `Success criteria: ${packet.successCriteria.join("; ")}`,
-    ].join("\n"),
-    stderr: "No stderr. This open-source demo runs in local simulation mode.",
-    durationMs: 320,
-  };
-}
-
 function buildBatchCommand(packetList: CommandPacket[]): string {
   return packetList.map((packet) => packet.suggestedCommand).join("\n");
 }
@@ -502,7 +481,7 @@ function sortCommandTasks(
   }
 }
 
-function buildRunRecord(taskId: string, result: DemoResult): OrchestraRunRecord {
+function buildRunRecord(taskId: string, result: ExecutorRunResult): OrchestraRunRecord {
   return {
     id: `${taskId}-${Date.now()}`,
     taskId,
@@ -617,48 +596,6 @@ function normalizeBoard(board: OrchestraBoard): OrchestraBoard {
       ...task,
       comments: task.comments ?? [],
     })),
-  };
-}
-
-function isTaskRunnable(task: OrchestraTask, board: OrchestraBoard, batchTaskIds: Set<string>, completedInBatch: Set<string>) {
-  if (task.state !== "ready") {
-    return {
-      runnable: false,
-      reason: `Task is currently ${task.state}.`,
-    };
-  }
-
-  for (const dependencyId of task.dependsOn) {
-    if (completedInBatch.has(dependencyId)) {
-      continue;
-    }
-
-    const dependency = board.tasks.find((candidate) => candidate.id === dependencyId);
-    if (!dependency) {
-      return {
-        runnable: false,
-        reason: `Dependency ${dependencyId} is missing from the board.`,
-      };
-    }
-
-    if (batchTaskIds.has(dependencyId)) {
-      return {
-        runnable: false,
-        reason: `Dependency ${dependency.title} has not completed yet in this batch.`,
-      };
-    }
-
-    if (!["done", "review"].includes(dependency.state)) {
-      return {
-        runnable: false,
-        reason: `Dependency ${dependency.title} is still ${dependency.state}.`,
-      };
-    }
-  }
-
-  return {
-    runnable: true,
-    reason: "",
   };
 }
 
@@ -1007,45 +944,12 @@ export function OrchestraBoard() {
       return;
     }
 
-    const completedInBatch = new Set<string>();
-    const batchTaskIds = new Set(orderedCommandTasks.map((task) => task.id));
-    const executionLog: Array<{
-      task: OrchestraTask;
-      result: DemoResult;
-      status: OrchestraRunRecord["status"];
-      shouldAdvance: boolean;
-    }> = [];
-
-    for (const [index, task] of orderedCommandTasks.entries()) {
-      const packet = commandPackets[index];
-      const gate = isTaskRunnable(task, board, batchTaskIds, completedInBatch);
-
-      if (!gate.runnable) {
-        executionLog.push({
-          task,
-          status: "failed",
-          shouldAdvance: false,
-          result: {
-            executor: packet.executor,
-            mode: "dry_run",
-            command: packet.suggestedCommand,
-            stdout: `Skipped ${task.title}.`,
-            stderr: gate.reason,
-            durationMs: 0,
-          },
-        });
-        continue;
-      }
-
-      const result = buildDemoResult(packet);
-      executionLog.push({
-        task,
-        result,
-        status: "succeeded",
-        shouldAdvance: true,
-      });
-      completedInBatch.add(task.id);
-    }
+    const executionLog = runBatchWithAdapter({
+      adapter: simulatedExecutorAdapter,
+      board,
+      tasks: orderedCommandTasks,
+      packets: commandPackets,
+    });
 
     if (!executionLog.length) {
       return;
