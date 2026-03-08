@@ -91,6 +91,11 @@ type DispatchHistoryEntry = {
   taskIds: string[];
 };
 type RunStatusFilter = "all" | "succeeded" | "failed";
+type ClarificationQuestion = {
+  id: string;
+  prompt: string;
+  kind: "goal" | "constraint";
+};
 
 const LOCALE_KEY = "orchestra-oss-locale";
 const STATE_KEY = "orchestra-oss-state";
@@ -895,6 +900,7 @@ export function OrchestraBoard() {
   const [dispatchHistory, setDispatchHistory] = useState<DispatchHistoryEntry[]>([]);
   const [autoLoadNextBatch, setAutoLoadNextBatch] = useState(false);
   const [runStatusFilter, setRunStatusFilter] = useState<RunStatusFilter>("all");
+  const [clarificationAnswer, setClarificationAnswer] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [quickFilter, setQuickFilter] = useState<QuickFilter>("all");
   const [laneFilter, setLaneFilter] = useState<OrchestraTask["lane"] | "all">("all");
@@ -1315,6 +1321,42 @@ export function OrchestraBoard() {
       suggestedBatch,
     };
   }, [boardSnapshots]);
+  const clarificationQuestions = useMemo<ClarificationQuestion[]>(() => {
+    const goalList = goals.split("\n").map((line) => line.trim()).filter(Boolean);
+    const constraintList = constraints.split("\n").map((line) => line.trim()).filter(Boolean);
+    const questions: ClarificationQuestion[] = [];
+
+    if (!problem.trim()) {
+      questions.push({
+        id: "problem",
+        prompt: locale === "zh" ? "这个功能最核心要解决的业务问题是什么？" : "What core business problem should this feature solve?",
+        kind: "goal",
+      });
+    }
+    if (!goalList.length) {
+      questions.push({
+        id: "goal",
+        prompt: locale === "zh" ? "这个功能成功以后，最想看到什么结果？" : "If this feature succeeds, what concrete outcome do you want to see?",
+        kind: "goal",
+      });
+    }
+    if (!constraintList.length) {
+      questions.push({
+        id: "constraint",
+        prompt: locale === "zh" ? "有没有不能碰的限制，比如时间、技术栈、风险边界？" : "What constraints cannot be violated, such as time, stack, or risk boundaries?",
+        kind: "constraint",
+      });
+    }
+    if (goalList.length && constraintList.length && !title.trim()) {
+      questions.push({
+        id: "title",
+        prompt: locale === "zh" ? "给这个功能起一个便于团队理解的名字？" : "What is a team-friendly name for this feature?",
+        kind: "goal",
+      });
+    }
+
+    return questions.slice(0, 3);
+  }, [constraints, goals, locale, problem, title]);
   const ideaConversation = useMemo(() => {
     const goalList = goals.split("\n").map((line) => line.trim()).filter(Boolean);
     const constraintList = constraints.split("\n").map((line) => line.trim()).filter(Boolean);
@@ -1336,6 +1378,11 @@ export function OrchestraBoard() {
           ? `我先把需求整理成一句可执行 brief：${brief}`
           : `I will first turn the request into an executable brief: ${brief}`,
       },
+      ...(clarificationQuestions[0] ? [{
+        role: "Idea Agent",
+        tone: "sky",
+        content: clarificationQuestions[0].prompt,
+      }] : []),
       {
         role: "Planner",
         tone: "amber",
@@ -1355,7 +1402,7 @@ export function OrchestraBoard() {
             : "There is no task graph yet. I will clarify the idea first, then generate the execution plan."),
       },
     ];
-  }, [board.feature.constraints.length, board.feature.goals.length, board.feature.problem, board.tasks, constraints, goals, locale, problem, title]);
+  }, [board.feature.constraints.length, board.feature.goals.length, board.feature.problem, board.tasks, clarificationQuestions, constraints, goals, locale, problem, title]);
   const autonomousStages = useMemo(() => {
     const planningDone = board.tasks.some((task) => task.lane === "planning" && ["done", "review"].includes(task.state));
     const executionInFlight = board.tasks.some((task) => task.lane === "execution" && ["ready", "in_progress", "review"].includes(task.state));
@@ -2144,6 +2191,27 @@ export function OrchestraBoard() {
     setBoard((current) => moveTask(current, selectedTask.id, selectedTask.lane, nextIndex));
   }
 
+  function handleClarificationSubmit() {
+    const answer = clarificationAnswer.trim();
+    const nextQuestion = clarificationQuestions[0];
+
+    if (!answer || !nextQuestion) {
+      return;
+    }
+
+    if (nextQuestion.id === "problem") {
+      setProblem(answer);
+    } else if (nextQuestion.id === "title") {
+      setTitle(answer);
+    } else if (nextQuestion.kind === "goal") {
+      setGoals((current) => [current.trim(), answer].filter(Boolean).join("\n"));
+    } else {
+      setConstraints((current) => [current.trim(), answer].filter(Boolean).join("\n"));
+    }
+
+    setClarificationAnswer("");
+  }
+
   return (
     <div className="mx-auto flex max-w-7xl flex-col gap-6 pb-10">
       <section className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
@@ -2175,6 +2243,40 @@ export function OrchestraBoard() {
                 <div className="mt-2 text-sm leading-6 text-slate-700">{entry.content}</div>
               </div>
             ))}
+            <div className="rounded-2xl border border-slate-200 bg-white/90 p-4">
+              <div className="text-xs uppercase tracking-[0.18em] text-slate-500">
+                {locale === "zh" ? "当前澄清问题" : "Current Clarification"}
+              </div>
+              <div className="mt-2 text-sm leading-6 text-slate-700">
+                {clarificationQuestions[0]
+                  ? clarificationQuestions[0].prompt
+                  : (locale === "zh" ? "目前信息已经足够，下一步可以直接生成计划或进入自动执行。" : "The brief is sufficiently clarified. You can generate the plan or move into autonomous execution.")}
+              </div>
+              <div className="mt-3 flex flex-col gap-3">
+                <Textarea
+                  value={clarificationAnswer}
+                  onChange={(event) => setClarificationAnswer(event.target.value)}
+                  placeholder={locale === "zh" ? "直接回答上面这个问题，系统会把它写回计划输入。" : "Answer the question above and the system will write it back into the planning inputs."}
+                  className="min-h-24"
+                />
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button
+                    className="rounded-full bg-slate-950 text-white hover:bg-slate-800"
+                    onClick={handleClarificationSubmit}
+                    disabled={!clarificationQuestions[0] || !clarificationAnswer.trim()}
+                  >
+                    {locale === "zh" ? "确认回答" : "Apply Answer"}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="rounded-full border-slate-200 bg-white"
+                    onClick={handleGeneratePlan}
+                  >
+                    {locale === "zh" ? "直接生成计划" : "Generate Plan Now"}
+                  </Button>
+                </div>
+              </div>
+            </div>
           </CardContent>
         </Card>
 
