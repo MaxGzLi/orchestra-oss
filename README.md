@@ -40,6 +40,28 @@ Then open:
 http://localhost:3000
 ```
 
+## How To Use It
+
+If you open the app and still do not know where to start, read this first:
+
+- [Orchestra 从 0 到 1 使用指南](./docs/zero-to-one-guide.md)
+
+That guide covers:
+
+- what the product is for
+- what each major area on the screen does
+- the shortest first-run path
+- how to go from feature brief to batch execution
+- how dispatch queue and multi-board workflow work
+- what is real today vs what is still stubbed
+
+Recommended order:
+
+1. Read the guide once
+2. Open the app
+3. Follow the `7-step quick path`
+4. Then come back and explore multi-board / dispatch / bridge settings
+
 ## What Is Simulated
 
 This open-source version intentionally uses local simulation for execution.
@@ -47,7 +69,8 @@ This open-source version intentionally uses local simulation for execution.
 - Handoff packets are real UI artifacts
 - Run history is local demo state
 - Timeline events are generated locally
-- No external CLI is invoked
+- No external CLI is invoked yet
+- Process runner contracts are defined, but still stubbed
 
 This keeps the repo safe and easy to run without extra credentials.
 
