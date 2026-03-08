@@ -1577,26 +1577,6 @@ export function OrchestraBoard() {
     hydrateFromSnapshot(snapshot);
   }
 
-  function handleOpenPortfolioTask(snapshotId: string, taskId: string) {
-    const snapshot = boardSnapshots.find((candidate) => candidate.id === snapshotId);
-    if (!snapshot) {
-      return;
-    }
-
-    hydrateFromSnapshot({
-      ...snapshot,
-      selectedTaskId: taskId,
-    });
-  }
-
-  function handleQueueDispatchItem(item: DispatchQueueItem) {
-    setDispatchQueue((current) => (
-      current.some((entry) => entry.boardId === item.boardId && entry.taskId === item.taskId)
-        ? current
-        : [...current, item]
-    ));
-  }
-
   function handleQueueSuggestedBatch() {
     setDispatchQueue((current) => {
       const next = [...current];
@@ -1614,14 +1594,6 @@ export function OrchestraBoard() {
       });
       return next;
     });
-  }
-
-  function handleRemoveDispatchItem(boardId: string, taskId: string) {
-    setDispatchQueue((current) => current.filter((item) => !(item.boardId === boardId && item.taskId === taskId)));
-  }
-
-  function handleClearDispatchQueue() {
-    setDispatchQueue([]);
   }
 
   function handleLoadDispatchQueue() {
@@ -2222,466 +2194,164 @@ export function OrchestraBoard() {
               </Button>
             </div>
 
-            <div className="grid gap-3 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
-              <div className="rounded-[20px] border border-slate-200/80 bg-slate-50/80 p-3">
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <div className="text-xs uppercase tracking-[0.18em] text-slate-500">
-                      {locale === "zh" ? "Portfolio 总览" : "Portfolio Overview"}
-                    </div>
-                    <div className="mt-1 text-sm text-slate-600">
-                      {locale === "zh"
-                        ? "跨 board 看当前组合的交付压力。"
-                        : "Track delivery pressure across active boards."}
-                    </div>
-                  </div>
-                  <Badge variant="outline" className="rounded-full border-slate-300 text-slate-600">
-                    {locale === "zh" ? `${portfolioOverview.boardCount} 个 feature` : `${portfolioOverview.boardCount} features`}
-                  </Badge>
+            <details className="group rounded-[20px] border border-slate-200/80 bg-slate-50/80">
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-medium text-slate-900">
+                <div className="flex items-center gap-2">
+                  <Flag className="h-4 w-4 text-emerald-600" />
+                  <span>{locale === "zh" ? "Portfolio、调度与 Board 管理" : "Portfolio, Dispatch, and Board Management"}</span>
                 </div>
-                <div className="mt-3 grid gap-2 sm:grid-cols-4">
+                <div className="flex items-center gap-2 text-xs text-slate-500">
+                  <span>{locale === "zh" ? `${portfolioOverview.boardCount} 个 feature` : `${portfolioOverview.boardCount} features`}</span>
+                  <span className="group-open:hidden">{locale === "zh" ? "展开" : "Expand"}</span>
+                  <span className="hidden group-open:inline">{locale === "zh" ? "收起" : "Collapse"}</span>
+                </div>
+              </summary>
+              <div className="grid gap-3 border-t border-slate-200 p-4">
+                <div className="grid gap-2 sm:grid-cols-4">
                   <MetricCard icon={Clipboard} label={locale === "zh" ? "总任务" : "Tasks"} value={String(portfolioOverview.tasks)} compact />
                   <MetricCard icon={Sparkles} label={locale === "zh" ? "Ready" : "Ready"} value={String(portfolioOverview.ready)} compact />
                   <MetricCard icon={Cpu} label={locale === "zh" ? "进行中" : "In Flight"} value={String(portfolioOverview.inFlight)} compact />
                   <MetricCard icon={CheckCircle2} label={locale === "zh" ? "阻塞" : "Blocked"} value={String(portfolioOverview.blocked)} compact />
                 </div>
-              </div>
 
-              <div className="rounded-[20px] border border-slate-200/80 bg-slate-50/80 p-3">
-                <div className="text-xs uppercase tracking-[0.18em] text-slate-500">
-                  {locale === "zh" ? "最近活跃" : "Recently Active"}
-                </div>
-                <div className="mt-3 space-y-2">
-                  {portfolioOverview.recentlyActiveBoards.map((snapshot) => (
-                    <button
-                      key={snapshot.id}
-                      type="button"
-                      onClick={() => handleSwitchBoardSnapshot(snapshot.id)}
-                      className="flex w-full items-center justify-between rounded-2xl border border-slate-200 bg-white/90 px-3 py-2 text-left transition-colors hover:border-slate-300"
-                    >
-                      <div className="min-w-0">
-                        <div className="truncate text-sm font-medium text-slate-900">{snapshot.name}</div>
-                        <div className="text-xs text-slate-500">
-                          {snapshot.updatedAt.slice(0, 10)}
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-1 text-xs">
-                        <Badge variant="outline" className="rounded-full border-emerald-200 text-emerald-700">
-                          {locale === "zh" ? `就绪 ${snapshot.ready}` : `Ready ${snapshot.ready}`}
-                        </Badge>
-                        <Badge variant="outline" className="rounded-full border-rose-200 text-rose-700">
-                          {locale === "zh" ? `阻塞 ${snapshot.blocked}` : `Blocked ${snapshot.blocked}`}
-                        </Badge>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
+                <div className="grid gap-3 xl:grid-cols-3">
+                  <div className="rounded-2xl border border-slate-200 bg-white/90 p-3">
+                    <div className="text-xs uppercase tracking-[0.18em] text-slate-500">
+                      {locale === "zh" ? "最近活跃" : "Recently Active"}
+                    </div>
+                    <div className="mt-3 space-y-2">
+                      {portfolioOverview.recentlyActiveBoards.map((snapshot) => (
+                        <button
+                          key={snapshot.id}
+                          type="button"
+                          onClick={() => handleSwitchBoardSnapshot(snapshot.id)}
+                          className="flex w-full items-center justify-between rounded-2xl border border-slate-200 bg-slate-50/70 px-3 py-2 text-left transition-colors hover:border-slate-300"
+                        >
+                          <div className="min-w-0">
+                            <div className="truncate text-sm font-medium text-slate-900">{snapshot.name}</div>
+                            <div className="text-xs text-slate-500">{snapshot.updatedAt.slice(0, 10)}</div>
+                          </div>
+                          <Badge variant="outline" className="rounded-full border-slate-300 text-slate-600">
+                            {snapshot.ready}
+                          </Badge>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
 
-            <div className="rounded-[20px] border border-slate-200/80 bg-slate-50/80 p-3">
-              <div className="flex items-center justify-between gap-3">
-                <div className="text-xs uppercase tracking-[0.18em] text-slate-500">
-                  {locale === "zh" ? "需要关注的 Feature" : "Boards Needing Attention"}
-                </div>
-                <span className="text-xs text-slate-500">
-                  {locale === "zh" ? "按阻塞和高优先级未完成排序" : "Ranked by blocked and critical open work"}
-                </span>
-              </div>
-              <div className="mt-3 grid gap-2 md:grid-cols-3">
-                {portfolioOverview.riskyBoards.map((snapshot) => (
-                  <button
-                    key={snapshot.id}
-                    type="button"
-                    onClick={() => handleSwitchBoardSnapshot(snapshot.id)}
-                    className="rounded-2xl border border-slate-200 bg-white/90 px-3 py-3 text-left transition-colors hover:border-slate-300"
-                  >
-                    <div className="truncate text-sm font-semibold text-slate-950">{snapshot.name}</div>
-                    <div className="mt-2 flex flex-wrap gap-1 text-xs">
-                      <Badge variant="outline" className="rounded-full border-rose-200 text-rose-700">
-                        {locale === "zh" ? `阻塞 ${snapshot.blocked}` : `Blocked ${snapshot.blocked}`}
-                      </Badge>
-                      <Badge variant="outline" className="rounded-full border-amber-200 text-amber-700">
-                        {locale === "zh" ? `关键 ${snapshot.criticalOpen}` : `Critical ${snapshot.criticalOpen}`}
-                      </Badge>
+                  <div className="rounded-2xl border border-slate-200 bg-white/90 p-3">
+                    <div className="text-xs uppercase tracking-[0.18em] text-slate-500">
+                      {locale === "zh" ? "建议先推进" : "Recommended Next Boards"}
+                    </div>
+                    <div className="mt-3 space-y-2">
+                      {portfolioActionPlan.nextBoards.map((snapshot) => (
+                        <button
+                          key={snapshot.id}
+                          type="button"
+                          onClick={() => handleSwitchBoardSnapshot(snapshot.id)}
+                          className="w-full rounded-2xl border border-slate-200 bg-slate-50/70 px-3 py-3 text-left transition-colors hover:border-slate-300"
+                        >
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="truncate text-sm font-semibold text-slate-950">{snapshot.name}</div>
+                            <Badge variant="outline" className="rounded-full border-slate-300 text-slate-600">
+                              {snapshot.score}
+                            </Badge>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="rounded-2xl border border-slate-200 bg-white/90 p-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="text-xs uppercase tracking-[0.18em] text-slate-500">
+                        {locale === "zh" ? "Dispatch Queue" : "Dispatch Queue"}
+                      </div>
                       <Badge variant="outline" className="rounded-full border-slate-300 text-slate-600">
-                        {locale === "zh" ? `完成 ${snapshot.completionRate}%` : `${snapshot.completionRate}% done`}
+                        {dispatchQueue.length}
                       </Badge>
                     </div>
-                    <div className="mt-3 text-xs text-slate-500">
-                      {locale === "zh"
-                        ? `还有 ${snapshot.ready} 个 ready 任务可以推进。`
-                        : `${snapshot.ready} ready tasks can move immediately.`}
-                    </div>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="grid gap-3 xl:grid-cols-3">
-              <div className="rounded-[20px] border border-slate-200/80 bg-slate-50/80 p-3">
-                <div className="text-xs uppercase tracking-[0.18em] text-slate-500">
-                  {locale === "zh" ? "建议先推进" : "Recommended Next Boards"}
-                </div>
-                <div className="mt-3 space-y-2">
-                  {portfolioActionPlan.nextBoards.map((snapshot) => (
-                    <button
-                      key={snapshot.id}
-                      type="button"
-                      onClick={() => handleSwitchBoardSnapshot(snapshot.id)}
-                      className="w-full rounded-2xl border border-slate-200 bg-white/90 px-3 py-3 text-left transition-colors hover:border-slate-300"
-                    >
-                      <div className="flex items-center justify-between gap-3">
-                        <div className="truncate text-sm font-semibold text-slate-950">{snapshot.name}</div>
-                        <Badge variant="outline" className="rounded-full border-slate-300 text-slate-600">
-                          {snapshot.score}
-                        </Badge>
-                      </div>
-                      <div className="mt-2 flex flex-wrap gap-1 text-xs">
-                        <Badge variant="outline" className="rounded-full border-emerald-200 text-emerald-700">
-                          {locale === "zh" ? `Ready ${snapshot.runnable}` : `Ready ${snapshot.runnable}`}
-                        </Badge>
-                        <Badge variant="outline" className="rounded-full border-rose-200 text-rose-700">
-                          {locale === "zh" ? `阻塞 ${snapshot.blocked}` : `Blocked ${snapshot.blocked}`}
-                        </Badge>
-                        <Badge variant="outline" className="rounded-full border-amber-200 text-amber-700">
-                          {locale === "zh" ? `关键 ${snapshot.criticalOpen}` : `Critical ${snapshot.criticalOpen}`}
-                        </Badge>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="rounded-[20px] border border-slate-200/80 bg-slate-50/80 p-3">
-                <div className="text-xs uppercase tracking-[0.18em] text-slate-500">
-                  {locale === "zh" ? "执行者负载" : "Executor Load"}
-                </div>
-                <div className="mt-3 space-y-2">
-                  {portfolioActionPlan.executorLoad.map((entry) => (
-                    <div
-                      key={entry.executor}
-                      className="rounded-2xl border border-slate-200 bg-white/90 px-3 py-3"
-                    >
-                      <div className="flex items-center justify-between gap-3">
-                        <Badge className={cn("rounded-full", ownerTone[entry.executor])}>
-                          {entry.executor}
-                        </Badge>
-                        <span className="text-xs text-slate-500">
-                          {locale === "zh" ? `${entry.active} 个活跃任务` : `${entry.active} active tasks`}
-                        </span>
-                      </div>
-                      <div className="mt-2 text-xs text-slate-500">
-                        {entry.blocked > 0
-                          ? (locale === "zh" ? `${entry.blocked} 个阻塞任务需要卸载或协助。` : `${entry.blocked} blocked tasks need relief or support.`)
-                          : (locale === "zh" ? "当前没有阻塞任务，负载可控。" : "No blocked tasks right now; load is manageable.")}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div className="rounded-[20px] border border-slate-200/80 bg-slate-50/80 p-3">
-                <div className="text-xs uppercase tracking-[0.18em] text-slate-500">
-                  {locale === "zh" ? "推荐下一批执行" : "Suggested Cross-Board Batch"}
-                </div>
-                <div className="mt-3 flex items-center justify-between gap-2">
-                  <span className="text-xs text-slate-500">
-                    {locale === "zh" ? `已排队 ${dispatchQueue.length} 个任务` : `${dispatchQueue.length} queued`}
-                  </span>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="rounded-full border-slate-200 bg-white"
-                    onClick={handleQueueSuggestedBatch}
-                    disabled={!portfolioActionPlan.suggestedBatch.length}
-                  >
-                    {locale === "zh" ? "整批加入队列" : "Queue All"}
-                  </Button>
-                </div>
-                <div className="mt-3 space-y-2">
-                  {portfolioActionPlan.suggestedBatch.map((task) => (
-                    <div
-                      key={`${task.boardId}-${task.taskId}`}
-                      className="rounded-2xl border border-slate-200 bg-white/90 px-3 py-3"
-                    >
-                      <button
-                        type="button"
-                        onClick={() => handleOpenPortfolioTask(task.boardId, task.taskId)}
-                        className="w-full text-left"
+                    <div className="mt-3 flex flex-wrap items-center gap-2">
+                      <select
+                        value={dispatchStrategy}
+                        onChange={(event) => setDispatchStrategy(event.target.value as DispatchQueueStrategy)}
+                        className="rounded-full border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm outline-none focus:border-slate-300"
                       >
-                        <div className="truncate text-sm font-semibold text-slate-950">{task.title}</div>
-                      </button>
-                      <div className="mt-1 text-xs text-slate-500">{task.boardName}</div>
-                      <div className="mt-2 flex flex-wrap gap-1 text-xs">
-                        <Badge className={cn("rounded-full", ownerTone[task.owner])}>{task.owner}</Badge>
-                        <Badge variant="outline" className={cn("rounded-full", priorityTone[task.priority])}>
-                          {locale === "zh" ? `优先级 ${priorityLabel[locale][task.priority]}` : `Priority ${priorityLabel[locale][task.priority]}`}
-                        </Badge>
-                      </div>
-                      <div className="mt-3 flex items-center justify-between gap-2">
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          className="rounded-full"
-                          onClick={() => handleOpenPortfolioTask(task.boardId, task.taskId)}
-                        >
-                          {locale === "zh" ? "查看任务" : "Open Task"}
-                        </Button>
-                        <Button
-                          type="button"
-                          size="sm"
-                          className="rounded-full bg-slate-950 text-white hover:bg-slate-800"
-                          onClick={() => handleQueueDispatchItem({
-                            boardId: task.boardId,
-                            boardName: task.boardName,
-                            taskId: task.taskId,
-                            title: task.title,
-                            owner: task.owner,
-                            priority: task.priority,
-                          })}
-                        >
-                          {locale === "zh" ? "加入调度队列" : "Queue Dispatch"}
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            <div className="rounded-[20px] border border-slate-200/80 bg-slate-50/80 p-3">
-              <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                <div>
-                  <div className="text-xs uppercase tracking-[0.18em] text-slate-500">
-                    {locale === "zh" ? "Dispatch Queue" : "Dispatch Queue"}
-                  </div>
-                  <div className="mt-1 text-sm text-slate-600">
-                    {nextDispatchTarget
-                      ? (locale === "zh"
-                        ? `下一步会装载 ${nextDispatchTarget.boardName} 的 ${nextDispatchTarget.items.length} 个任务到执行区。`
-                        : `Next load will send ${nextDispatchTarget.items.length} tasks from ${nextDispatchTarget.boardName} into the batch console.`)
-                      : (locale === "zh"
-                        ? "先从上面的推荐批次中把任务加入队列。"
-                        : "Queue tasks from the suggested batch above first.")}
-                  </div>
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <select
-                    value={dispatchStrategy}
-                    onChange={(event) => setDispatchStrategy(event.target.value as DispatchQueueStrategy)}
-                    className="rounded-full border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm outline-none focus:border-slate-300"
-                  >
-                    <option value="board">{locale === "zh" ? "按 board 装载" : "Load by board"}</option>
-                    <option value="owner">{locale === "zh" ? "按执行者装载" : "Load by executor"}</option>
-                    <option value="priority">{locale === "zh" ? "按优先级装载" : "Load by priority"}</option>
-                  </select>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="rounded-full border-slate-200 bg-white"
-                    onClick={handleClearDispatchQueue}
-                    disabled={!dispatchQueue.length}
-                  >
-                    {locale === "zh" ? "清空队列" : "Clear Queue"}
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    className="rounded-full bg-slate-950 text-white hover:bg-slate-800"
-                    onClick={handleLoadDispatchQueue}
-                    disabled={!nextDispatchTarget}
-                  >
-                    {locale === "zh" ? "装载到执行区" : "Load Into Batch"}
-                  </Button>
-                </div>
-              </div>
-              {nextDispatchTarget ? (
-                <div className="mt-3 rounded-2xl border border-slate-200 bg-white/80 px-4 py-3 text-sm text-slate-600">
-                  {nextDispatchTarget.strategy === "owner"
-                    ? (locale === "zh"
-                      ? `下一批将按执行者 ${nextDispatchTarget.owner} 装载 ${nextDispatchTarget.items.length} 个任务。`
-                      : `Next load will group ${nextDispatchTarget.items.length} tasks for ${nextDispatchTarget.owner}.`)
-                    : nextDispatchTarget.strategy === "priority"
-                      ? (locale === "zh"
-                        ? `下一批将从 ${nextDispatchTarget.boardName} 装载最高优先级任务。`
-                        : `Next load will take the highest-priority tasks from ${nextDispatchTarget.boardName}.`)
-                      : (locale === "zh"
-                        ? `下一批将装载 ${nextDispatchTarget.boardName} 的 ${nextDispatchTarget.items.length} 个任务。`
-                        : `Next load will take ${nextDispatchTarget.items.length} tasks from ${nextDispatchTarget.boardName}.`)}
-                </div>
-              ) : null}
-              <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
-                {dispatchQueue.map((item) => (
-                  <div
-                    key={`${item.boardId}-${item.taskId}`}
-                    className="rounded-2xl border border-slate-200 bg-white/90 px-3 py-3"
-                  >
-                    <div className="truncate text-sm font-semibold text-slate-950">{item.title}</div>
-                    <div className="mt-1 text-xs text-slate-500">{item.boardName}</div>
-                    <div className="mt-2 flex flex-wrap gap-1 text-xs">
-                      <Badge className={cn("rounded-full", ownerTone[item.owner])}>{item.owner}</Badge>
-                      <Badge variant="outline" className={cn("rounded-full", priorityTone[item.priority])}>
-                        {priorityLabel[locale][item.priority]}
-                      </Badge>
-                    </div>
-                    <div className="mt-3 flex items-center justify-between gap-2">
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="rounded-full"
-                        onClick={() => handleOpenPortfolioTask(item.boardId, item.taskId)}
-                      >
-                        {locale === "zh" ? "查看" : "Open"}
+                        <option value="board">{locale === "zh" ? "按 board 装载" : "Load by board"}</option>
+                        <option value="owner">{locale === "zh" ? "按执行者装载" : "Load by executor"}</option>
+                        <option value="priority">{locale === "zh" ? "按优先级装载" : "Load by priority"}</option>
+                      </select>
+                      <Button type="button" variant="outline" size="sm" className="rounded-full border-slate-200 bg-white" onClick={handleQueueSuggestedBatch}>
+                        {locale === "zh" ? "加入推荐批次" : "Queue Suggested"}
                       </Button>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="rounded-full text-slate-500"
-                        onClick={() => handleRemoveDispatchItem(item.boardId, item.taskId)}
-                      >
-                        {locale === "zh" ? "移除" : "Remove"}
+                      <Button type="button" size="sm" className="rounded-full bg-slate-950 text-white hover:bg-slate-800" onClick={handleLoadDispatchQueue} disabled={!nextDispatchTarget}>
+                        {locale === "zh" ? "装载到执行区" : "Load Into Batch"}
+                      </Button>
+                    </div>
+                    {nextDispatchTarget ? (
+                      <div className="mt-3 rounded-2xl border border-slate-200 bg-slate-50/70 px-3 py-2 text-xs text-slate-600">
+                        {locale === "zh"
+                          ? `下一批：${nextDispatchTarget.boardName} · ${nextDispatchTarget.items.length} 个任务`
+                          : `Next: ${nextDispatchTarget.boardName} · ${nextDispatchTarget.items.length} tasks`}
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-slate-200 bg-white/90 p-3">
+                  <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                    <div className="flex min-w-0 flex-1 items-center gap-2 rounded-full border border-slate-200 bg-slate-50/70 px-3">
+                      <Search className="h-4 w-4 text-slate-400" />
+                      <Input
+                        value={boardSearchQuery}
+                        onChange={(event) => setBoardSearchQuery(event.target.value)}
+                        placeholder={locale === "zh" ? "搜索 board 名称或 brief" : "Search boards or briefs"}
+                        className="h-9 border-0 bg-transparent px-0 shadow-none focus-visible:ring-0"
+                      />
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Input
+                        value={boardNameDraft}
+                        onChange={(event) => setBoardNameDraft(event.target.value)}
+                        className="h-9 w-full min-w-[220px] rounded-full border-slate-200 bg-white lg:w-[260px]"
+                        placeholder={locale === "zh" ? "当前 board 名称" : "Current board name"}
+                      />
+                      <Button type="button" variant="outline" className="rounded-full border-slate-200 bg-white" onClick={handleRenameBoard}>
+                        {locale === "zh" ? "重命名" : "Rename"}
                       </Button>
                     </div>
                   </div>
-                ))}
-              </div>
-              {!dispatchQueue.length ? (
-                <div className="mt-3 rounded-2xl border border-dashed border-slate-200 bg-white/70 px-4 py-5 text-sm text-slate-500">
-                  {locale === "zh" ? "队列为空。先把跨 board 的 ready 任务排进来，再统一装载执行。" : "The queue is empty. Queue ready tasks across boards, then load them into the batch console."}
-                </div>
-              ) : null}
-            </div>
 
-            <div className="rounded-[20px] border border-slate-200/80 bg-slate-50/80 p-3">
-              <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                <div className="flex min-w-0 flex-1 items-center gap-2 rounded-full border border-slate-200 bg-white px-3">
-                  <Search className="h-4 w-4 text-slate-400" />
-                  <Input
-                    value={boardSearchQuery}
-                    onChange={(event) => setBoardSearchQuery(event.target.value)}
-                    placeholder={locale === "zh" ? "搜索 board 名称或 brief" : "Search boards or briefs"}
-                    className="h-9 border-0 bg-transparent px-0 shadow-none focus-visible:ring-0"
-                  />
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <Input
-                    value={boardNameDraft}
-                    onChange={(event) => setBoardNameDraft(event.target.value)}
-                    className="h-9 w-full min-w-[220px] rounded-full border-slate-200 bg-white lg:w-[260px]"
-                    placeholder={locale === "zh" ? "当前 board 名称" : "Current board name"}
-                  />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="rounded-full border-slate-200 bg-white"
-                    onClick={handleRenameBoard}
-                  >
-                    {locale === "zh" ? "重命名" : "Rename"}
-                  </Button>
-                </div>
-              </div>
-
-              <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
-                {visibleBoardSnapshots.map((snapshot) => (
-                  <div
-                    key={snapshot.id}
-                    className={cn(
-                      "rounded-2xl border px-3 py-3 transition-colors",
-                      snapshot.id === activeBoardId
-                        ? "border-slate-950 bg-white shadow-sm"
-                        : "border-slate-200 bg-white/80",
-                    )}
-                  >
-                    <button
-                      type="button"
-                      onClick={() => handleSwitchBoardSnapshot(snapshot.id)}
-                      className="w-full text-left"
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <div className="truncate text-sm font-semibold text-slate-950">
-                            {snapshot.name}
-                          </div>
-                          <div className="mt-1 line-clamp-2 text-xs leading-5 text-slate-500">
-                            {snapshot.board.feature.problem}
+                  <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+                    {visibleBoardSnapshots.map((snapshot) => (
+                      <div
+                        key={snapshot.id}
+                        className={cn(
+                          "rounded-2xl border px-3 py-3 transition-colors",
+                          snapshot.id === activeBoardId ? "border-slate-950 bg-slate-50/70" : "border-slate-200 bg-white/80",
+                        )}
+                      >
+                        <button type="button" onClick={() => handleSwitchBoardSnapshot(snapshot.id)} className="w-full text-left">
+                          <div className="truncate text-sm font-semibold text-slate-950">{snapshot.name}</div>
+                          <div className="mt-1 line-clamp-2 text-xs leading-5 text-slate-500">{snapshot.board.feature.problem}</div>
+                        </button>
+                        <div className="mt-3 flex items-center justify-between gap-2 text-xs text-slate-500">
+                          <span>{snapshot.updatedAt.slice(0, 10)}</span>
+                          <div className="flex items-center gap-1">
+                            <Button type="button" variant="ghost" size="icon" className="h-8 w-8 rounded-full text-slate-500" onClick={() => handleDuplicateBoard(snapshot.id)}>
+                              <Copy className="h-4 w-4" />
+                            </Button>
+                            <Button type="button" variant="ghost" size="icon" className="h-8 w-8 rounded-full text-slate-500" onClick={() => handleDeleteBoard(snapshot.id)} disabled={boardSnapshots.length <= 1}>
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
                           </div>
                         </div>
-                        <Badge
-                          variant="outline"
-                          className={cn(
-                            "shrink-0 rounded-full",
-                            snapshot.id === activeBoardId
-                              ? "border-slate-950 text-slate-950"
-                              : "border-slate-300 text-slate-500",
-                          )}
-                        >
-                          {snapshot.board.tasks.length}
-                        </Badge>
                       </div>
-                    </button>
-                    <div className="mt-3 flex items-center justify-between gap-2 text-xs text-slate-500">
-                      <span>
-                        {locale === "zh" ? "更新于" : "Updated"} {snapshot.updatedAt.slice(0, 10)}
-                      </span>
-                      <div className="flex items-center gap-1">
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 rounded-full text-slate-500"
-                          onClick={() => handleDuplicateBoard(snapshot.id)}
-                        >
-                          <Copy className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 rounded-full text-slate-500"
-                          onClick={() => handleDeleteBoard(snapshot.id)}
-                          disabled={boardSnapshots.length <= 1}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </div>
+                    ))}
                   </div>
-                ))}
-              </div>
-
-              {!visibleBoardSnapshots.length ? (
-                <div className="mt-3 rounded-2xl border border-dashed border-slate-200 bg-white/70 px-4 py-5 text-sm text-slate-500">
-                  {locale === "zh" ? "没有匹配的 board，试试清空搜索或另存一个新的。" : "No matching boards. Clear the search or save a new board."}
                 </div>
-              ) : null}
-            </div>
-
-            <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
-              <Flag className="h-3.5 w-3.5 text-emerald-600" />
-              {(locale === "zh"
-                ? [
-                    "1. 定义目标",
-                    "2. 生成任务图",
-                    "3. 选任务并编辑",
-                    "4. 批量执行",
-                  ]
-                : [
-                    "1. Define goal",
-                    "2. Generate graph",
-                    "3. Select and edit",
-                    "4. Run batch",
-                  ]).map((step) => (
-                <span key={step} className="rounded-full border border-slate-200 bg-white/80 px-2.5 py-1">
-                  {step}
-                </span>
-              ))}
-            </div>
+              </div>
+            </details>
           </CardContent>
         </Card>
       </section>
