@@ -1315,6 +1315,86 @@ export function OrchestraBoard() {
       suggestedBatch,
     };
   }, [boardSnapshots]);
+  const ideaConversation = useMemo(() => {
+    const goalList = goals.split("\n").map((line) => line.trim()).filter(Boolean);
+    const constraintList = constraints.split("\n").map((line) => line.trim()).filter(Boolean);
+    const brief = problem.trim() || board.feature.problem;
+    const primaryTask = board.tasks.find((task) => task.lane === "execution") ?? board.tasks[0];
+
+    return [
+      {
+        role: locale === "zh" ? "你" : "You",
+        tone: "slate",
+        content: locale === "zh"
+          ? (title.trim() ? `我想做「${title.trim()}」这个功能。` : "我有一个新的功能想法。")
+          : (title.trim() ? `I want to build "${title.trim()}".` : "I have a new feature idea."),
+      },
+      {
+        role: "Idea Agent",
+        tone: "sky",
+        content: locale === "zh"
+          ? `我先把需求整理成一句可执行 brief：${brief}`
+          : `I will first turn the request into an executable brief: ${brief}`,
+      },
+      {
+        role: "Planner",
+        tone: "amber",
+        content: locale === "zh"
+          ? `目前提炼出的目标有 ${goalList.length || board.feature.goals.length} 个，约束有 ${constraintList.length || board.feature.constraints.length} 个。下一步我会生成 plan 并拆成可并行任务。`
+          : `I currently see ${goalList.length || board.feature.goals.length} goals and ${constraintList.length || board.feature.constraints.length} constraints. Next I will generate a plan and split it into parallel tasks.`,
+      },
+      {
+        role: "Commander",
+        tone: "violet",
+        content: primaryTask
+          ? (locale === "zh"
+            ? `当前最接近可执行的是「${translateTask(primaryTask, locale).title}」。一旦你确认 brief，我就会自动进入 dispatch、test、review、fix 循环。`
+            : `The nearest executable slice is "${translateTask(primaryTask, locale).title}". Once you confirm the brief, I will move into dispatch, test, review, and fix loops automatically.`)
+          : (locale === "zh"
+            ? "当前还没有任务图。我会先把想法整理清楚，再生成执行计划。"
+            : "There is no task graph yet. I will clarify the idea first, then generate the execution plan."),
+      },
+    ];
+  }, [board.feature.constraints.length, board.feature.goals.length, board.feature.problem, board.tasks, constraints, goals, locale, problem, title]);
+  const autonomousStages = useMemo(() => {
+    const planningDone = board.tasks.some((task) => task.lane === "planning" && ["done", "review"].includes(task.state));
+    const executionInFlight = board.tasks.some((task) => task.lane === "execution" && ["ready", "in_progress", "review"].includes(task.state));
+    const reviewRunning = board.tasks.some((task) => task.state === "review");
+    const fixLoopRunning = runHistory.some((record) => record.status === "failed");
+
+    return [
+      {
+        id: "clarify",
+        label: locale === "zh" ? "需求澄清" : "Clarify",
+        detail: locale === "zh" ? "和你对话，把想法整理成 brief。" : "Turn your idea into a clear brief through dialogue.",
+        status: problem.trim() ? "done" : "active",
+      },
+      {
+        id: "plan",
+        label: locale === "zh" ? "生成计划" : "Plan",
+        detail: locale === "zh" ? "把需求拆成 plan 和依赖图。" : "Split the brief into a plan and dependency graph.",
+        status: planningDone ? "done" : board.tasks.length > 0 ? "active" : "pending",
+      },
+      {
+        id: "dispatch",
+        label: locale === "zh" ? "并行分发" : "Dispatch",
+        detail: locale === "zh" ? "自动把任务分给 Codex / Claude Code。" : "Route tasks automatically to Codex / Claude Code.",
+        status: dispatchQueue.length || executionInFlight ? "active" : "pending",
+      },
+      {
+        id: "review",
+        label: locale === "zh" ? "测试 / Review" : "Test / Review",
+        detail: locale === "zh" ? "自动测试、review、失败重试。" : "Run tests, review, and retries automatically.",
+        status: reviewRunning ? "active" : runHistory.length ? "done" : "pending",
+      },
+      {
+        id: "fix",
+        label: locale === "zh" ? "修复闭环" : "Fix Loop",
+        detail: locale === "zh" ? "失败后继续修复，直到通过或升级给人。" : "Keep fixing until it passes or escalates to a human.",
+        status: fixLoopRunning ? "active" : batchSummaries.length ? "done" : "pending",
+      },
+    ];
+  }, [batchSummaries.length, board.tasks, dispatchQueue.length, locale, problem, runHistory]);
   const nextDispatchTarget = useMemo(() => {
     const priorityScore: Record<OrchestraTaskPriority, number> = {
       low: 1,
@@ -2066,6 +2146,92 @@ export function OrchestraBoard() {
 
   return (
     <div className="mx-auto flex max-w-7xl flex-col gap-6 pb-10">
+      <section className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
+        <Card className="border-slate-200/80 bg-[linear-gradient(180deg,_#ffffff_0%,_#fbfdff_100%)] shadow-[0_14px_30px_-26px_rgba(15,23,42,0.18)]">
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-slate-950">
+              <Bot className="h-5 w-5 text-sky-600" />
+              {locale === "zh" ? "需求对话" : "Idea Dialogue"}
+            </CardTitle>
+            <CardDescription>
+              {locale === "zh"
+                ? "你只负责提想法，系统负责澄清、规划和往下执行。"
+                : "You only provide the idea. The system clarifies, plans, and pushes execution forward."}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {ideaConversation.map((entry) => (
+              <div
+                key={`${entry.role}-${entry.content}`}
+                className={cn(
+                  "rounded-2xl border px-4 py-3",
+                  entry.tone === "slate" && "border-slate-200 bg-slate-50/80",
+                  entry.tone === "sky" && "border-sky-200 bg-sky-50/80",
+                  entry.tone === "amber" && "border-amber-200 bg-amber-50/80",
+                  entry.tone === "violet" && "border-violet-200 bg-violet-50/80",
+                )}
+              >
+                <div className="text-xs uppercase tracking-[0.18em] text-slate-500">{entry.role}</div>
+                <div className="mt-2 text-sm leading-6 text-slate-700">{entry.content}</div>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+
+        <Card className="border-slate-200/80 bg-[linear-gradient(180deg,_#ffffff_0%,_#fbfdff_100%)] shadow-[0_14px_30px_-26px_rgba(15,23,42,0.18)]">
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-slate-950">
+              <Cpu className="h-5 w-5 text-violet-600" />
+              {locale === "zh" ? "自动执行状态" : "Autonomous Run"}
+            </CardTitle>
+            <CardDescription>
+              {locale === "zh"
+                ? "系统应该从澄清一路走到 dispatch、test、review、fix。"
+                : "The system should move from clarification into dispatch, test, review, and fix loops."}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {autonomousStages.map((stage, index) => (
+              <div key={stage.id} className="flex gap-3">
+                <div className="flex flex-col items-center">
+                  <div
+                    className={cn(
+                      "flex h-9 w-9 items-center justify-center rounded-full border text-sm font-semibold",
+                      stage.status === "done" && "border-emerald-200 bg-emerald-50 text-emerald-700",
+                      stage.status === "active" && "border-sky-200 bg-sky-50 text-sky-700",
+                      stage.status === "pending" && "border-slate-200 bg-white text-slate-500",
+                    )}
+                  >
+                    {index + 1}
+                  </div>
+                  {index < autonomousStages.length - 1 ? <div className="mt-1 h-8 w-px bg-slate-200" /> : null}
+                </div>
+                <div className="rounded-2xl border border-slate-200 bg-slate-50/70 px-4 py-3 flex-1">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="text-sm font-medium text-slate-900">{stage.label}</div>
+                    <Badge
+                      className={cn(
+                        "rounded-full border",
+                        stage.status === "done" && "border-emerald-200 bg-emerald-50 text-emerald-700",
+                        stage.status === "active" && "border-sky-200 bg-sky-50 text-sky-700",
+                        stage.status === "pending" && "border-slate-200 bg-white text-slate-600",
+                      )}
+                    >
+                      {stage.status === "done"
+                        ? (locale === "zh" ? "已完成" : "Done")
+                        : stage.status === "active"
+                          ? (locale === "zh" ? "进行中" : "Active")
+                          : (locale === "zh" ? "待命" : "Pending")}
+                    </Badge>
+                  </div>
+                  <div className="mt-2 text-sm leading-6 text-slate-600">{stage.detail}</div>
+                </div>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      </section>
+
       <section className="grid gap-3">
         <Card className="border-slate-200/80 bg-[linear-gradient(135deg,_#ffffff_0%,_#f8fbff_58%,_#f8fafc_100%)] shadow-[0_14px_30px_-26px_rgba(15,23,42,0.2)]">
           <CardContent className="space-y-3 p-4">
@@ -2075,7 +2241,7 @@ export function OrchestraBoard() {
                   {locale === "zh" ? "Orchestra 工作台" : "Orchestra Workspace"}
                 </Badge>
                 <span className="text-sm text-slate-500">
-                  {locale === "zh" ? "定义目标，筛选任务，直接执行。" : "Define the goal, filter the work, and execute."}
+                  {locale === "zh" ? "输入想法，确认 plan，然后让 agent 自动往下跑。" : "Input the idea, confirm the plan, then let the agents keep moving."}
                 </span>
               </div>
               <div className="flex flex-wrap items-center gap-2">
